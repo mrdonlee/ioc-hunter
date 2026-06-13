@@ -3,6 +3,9 @@
 Commands:
     ioc-hunter check <ioc>            single-IOC lookup
     ioc-hunter scan-file <path>       extract + enrich every IOC in a file
+    ioc-hunter correlate <path>       find pivots across a batch of IOCs
+    ioc-hunter report <path>          render JSON / Markdown / STIX / MISP / Sigma / Suricata
+    ioc-hunter decode <text>          base64 / hex / URL / JWT / gzip / ... (magic by default)
     ioc-hunter sources                show which TI sources are active
     ioc-hunter configure              interactive .env wizard
 """
@@ -52,6 +55,7 @@ app = typer.Typer(
     rich_markup_mode="rich",
 )
 console = Console()
+
 
 def _safe(value: str) -> str:
     """Defang + escape Rich markup so `[.]`, `[@]` etc render literally."""
@@ -311,7 +315,12 @@ async def _run_report(
 @app.command(help="Enrich a file of IOCs and render JSON / Markdown / STIX / MISP.")
 def report(
     path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, resolve_path=True),
-    fmt: str = typer.Option("markdown", "--format", "-f", help="json | markdown | stix | misp"),
+    fmt: str = typer.Option(
+        "markdown",
+        "--format",
+        "-f",
+        help="json | markdown | stix | misp | sigma | suricata",
+    ),
     out: Path | None = typer.Option(None, "--out", "-o", help="Write to file instead of stdout."),
     no_cache: bool = typer.Option(False, "--no-cache", help="Skip the SQLite cache."),
 ) -> None:

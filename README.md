@@ -96,23 +96,11 @@ It walks through each key with the registration URL, writes a local
 ioc-hunter sources
 ```
 
-```
-                                   TI sources
-  Source       Status   Weight   Supports                         Key required
- ──────────────────────────────────────────────────────────────────────────────
-  tor_exit     active     0.40   ipv4, ipv6                       no
-  urlhaus      active     0.85   domain, ipv4, md5, sha256, url   yes
-  threatfox    active     0.85   domain, email, ipv4, ipv6,       yes
-                                 md5, sha1, sha256, url
-  abuseipdb    active     0.80   ipv4, ipv6                       yes
-  otx          active     0.75   cve, domain, ipv4, ipv6, md5,    yes
-                                 sha1, sha256, url
-  virustotal   active     0.90   domain, ipv4, ipv6, md5, sha1,   yes
-                                 sha256, url
-```
+![ioc-hunter sources](docs/screenshots/sources.svg)
 
-Sources marked `missing key` will skip with a clear message at runtime —
-not crash. You can run with as few as one (the keyless Tor feed).
+Sources marked `missing key` would show as yellow and skip with a clear
+message at runtime — not crash. You can run with as few as one (the
+keyless Tor feed).
 
 ---
 
@@ -149,32 +137,11 @@ lookups.
 
 ### Single IOC — defanged in, defanged out
 
-```console
-$ ioc-hunter check "185[.]220[.]101[.]42" --no-cache
-
-╭─────── IOC Hunter ────────╮
-│ 185[.]220[.]101[.]42      │
-│ type: ipv4                │
-│                           │
-│ MALICIOUS  confidence 46% │
-╰───────────────────────────╯
-                               Per-source results
-  Source       Verdict      Score   Notes
- ──────────────────────────────────────────────────────────────────────────────
-  tor_exit     SUSPICIOUS    0.50   tor, anonymizer
-  urlhaus      UNKNOWN       0.00
-  threatfox    UNKNOWN       0.00
-  abuseipdb    MALICIOUS     1.00   country:DE, usage:Commercial,
-                                    isp:Network for Tor-Exit traffic.
-  otx          MALICIOUS     1.00   Bruteforce, Brute-Force, SSH
-  virustotal   MALICIOUS     0.15   suspicious-udp, tor
-Tags: tor, anonymizer, country:DE, Bruteforce, SSH, Honeypot, webscanner, ...
-References:
-  • https://check.torproject.org/torbulkexitlist
-  • https://www.abuseipdb.com/check/185.220.101.42
-  • https://otx.alienvault.com/indicator/IPv4/185.220.101.42
-  • https://www.virustotal.com/gui/search/185.220.101.42
+```bash
+ioc-hunter check "185[.]220[.]101[.]42" --no-cache
 ```
+
+![ioc-hunter check](docs/screenshots/check.svg)
 
 That's a real Tor exit relay — flagged by 4 of 6 sources, with country,
 ISP, and attack-pattern tags. Confidence is shown explicitly so you can
@@ -184,26 +151,11 @@ defend the verdict in a ticket.
 
 `examples/sample-incident.txt` is included in the repo:
 
-```console
-$ ioc-hunter scan-file examples/sample-incident.txt --no-cache
-
-Extracted 10 IOC(s) from examples/sample-incident.txt
-                                   10 IOC(s)
-  IOC                Type          Verdict      Conf   Hits   Tags
- ──────────────────────────────────────────────────────────────────────────────
-  CVE-2024-21762     cve           MALICIOUS    100%    1/1   actively_exploited_kev,
-                                                              fortigate
-  275a021bbfb...     sha256        MALICIOUS     48%    4/4   windows, malware, ioc
-  185[.]220[.]101[.]42  ipv4       MALICIOUS     46%    6/6   tor, anonymizer
-  185[.]220[.]101[.]99  ipv4       MALICIOUS     46%    6/6   tor, anonymizer
-  8[.]8[.]8[.]8      ipv4          BENIGN        37%    6/6   country:US,
-                                                              isp:Google LLC
-  evil[.]com         domain        MALICIOUS     36%    4/4   ssl certificate, malware
-  hxxps://evil[.]com/login.php  url SUSPICIOUS   13%    4/4
-  hxxps://evil[.]com/install.exe url UNKNOWN     0%    4/4
-  bad[@]evil[.]com   email         UNKNOWN        0%    1/1
-  1BoatSLRHtKNngkdX... btc_address UNKNOWN        0%    0/0
+```bash
+ioc-hunter scan-file examples/sample-incident.txt --no-cache
 ```
+
+![ioc-hunter scan-file](docs/screenshots/scan-file.svg)
 
 Note: every IOC is **defanged on output** so you can't accidentally
 click `evil.com` from your terminal. They were also defanged on input
@@ -212,22 +164,11 @@ is automatic.
 
 ### Find cross-IOC pivots
 
-```console
-$ ioc-hunter correlate examples/sample-incident.txt --no-cache
-
-Extracted 10 IOC(s)
-                               Correlations (12)
-  Kind              Source                    →   Target              Evidence
- ──────────────────────────────────────────────────────────────────────────────
-  url_to_host       hxxps://evil[.]com/login.php → evil[.]com         URL hosted on evil.com
-  url_to_host       hxxps://evil[.]com/install.exe → evil[.]com       URL hosted on evil.com
-  email_to_domain   bad[@]evil[.]com          →   evil[.]com          Email at evil.com
-  shared_subnet     185[.]220[.]101[.]42      →   185[.]220[.]101[.]99 both in 185.220.101.0/24
-  shared_tag        185[.]220[.]101[.]42      →   185[.]220[.]101[.]99 both tagged 'tor'
-  shared_tag        185[.]220[.]101[.]42      →   185[.]220[.]101[.]99 both tagged 'Bruteforce'
-  shared_tag        evil[.]com                →   275a021bbfb...      both tagged 'malware'
-  ...
+```bash
+ioc-hunter correlate examples/sample-incident.txt --no-cache
 ```
+
+![ioc-hunter correlate](docs/screenshots/correlate.svg)
 
 ### Generate detection rules
 
@@ -264,15 +205,11 @@ Same input also exports as `--format suricata`, `--format stix`,
 
 ### Magic decode
 
-```console
-$ ioc-hunter decode "aHR0cHM6Ly9ldmlsLmNvbS9sb2dpbi5waHA="
-
-                 Magic decode — 2 candidate(s)
-  Op       Score   IOCs   Decoded
- ──────────────────────────────────────────────────────────────
-  base64    0.95      2   https://evil.com/login.php
-  rot13     0.85      0   nUE0pUZ6Yl9yqzyfYzAioF9fo2qcov5jnUN=
+```bash
+ioc-hunter decode "aHR0cHM6Ly9ldmlsLmNvbS9sb2dpbi5waHA="
 ```
+
+![ioc-hunter decode](docs/screenshots/decode.svg)
 
 The base64 candidate ranks first because the decoded text contains
 extractable IOCs — IOC presence is a tiebreaker in the scoring.
