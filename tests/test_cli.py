@@ -150,6 +150,63 @@ def test_sources_command() -> None:
         assert name in result.stdout
 
 
+def test_report_markdown_to_file(patch_engine, tmp_path: Path) -> None:
+    sample = tmp_path / "in.txt"
+    sample.write_text("Beacon to 185[.]220[.]101[.]42")
+    patch_engine(
+        {
+            "185.220.101.42": _verdict(
+                IOC(value="185.220.101.42", type=IOCType.IPV4),
+                Verdict.MALICIOUS,
+            ),
+        }
+    )
+    out_path = tmp_path / "report.md"
+    result = runner.invoke(
+        cli.app,
+        [
+            "report",
+            str(sample),
+            "--format",
+            "markdown",
+            "--out",
+            str(out_path),
+            "--no-cache",
+        ],
+    )
+    assert result.exit_code == 0
+    body = out_path.read_text()
+    assert "# IOC Hunter Report" in body
+    assert "185[.]220[.]101[.]42" in body
+
+
+def test_report_stix_to_stdout(patch_engine, tmp_path: Path) -> None:
+    sample = tmp_path / "in.txt"
+    sample.write_text("evil.com is dangerous")
+    patch_engine(
+        {"evil.com": _verdict(IOC(value="evil.com", type=IOCType.DOMAIN), Verdict.MALICIOUS)}
+    )
+    result = runner.invoke(
+        cli.app,
+        ["report", str(sample), "--format", "stix", "--no-cache"],
+    )
+    assert result.exit_code == 0
+    assert '"type": "bundle"' in result.stdout
+    assert "domain-name:value" in result.stdout
+
+
+def test_report_bad_format(patch_engine, tmp_path: Path) -> None:
+    sample = tmp_path / "in.txt"
+    sample.write_text("evil.com")
+    patch_engine({})
+    result = runner.invoke(
+        cli.app,
+        ["report", str(sample), "--format", "nope", "--no-cache"],
+    )
+    assert result.exit_code == 2
+    assert "Unknown format" in result.stdout
+
+
 def test_configure_writes_env(tmp_path: Path) -> None:
     target = tmp_path / "fresh.env"
     # Provide answers for each prompt: abuse_ch, abuseipdb, otx, virustotal, shodan

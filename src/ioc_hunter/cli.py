@@ -25,6 +25,7 @@ from ioc_hunter.config import Settings
 from ioc_hunter.core import IOC, defang, detect_type, extract_iocs
 from ioc_hunter.core.types import IOCType
 from ioc_hunter.engine import Engine
+from ioc_hunter.exporters import to_json, to_markdown, to_misp, to_stix
 from ioc_hunter.scorer import IOCVerdict
 from ioc_hunter.sources import (
     AbuseIPDBSource,
@@ -240,6 +241,65 @@ def scan_file(
     no_cache: bool = typer.Option(False, "--no-cache", help="Skip the SQLite cache."),
 ) -> None:
     exit_code = asyncio.run(_run_scan_file(path, use_cache=not no_cache))
+    raise typer.Exit(exit_code)
+
+
+_EXPORTERS = {
+    "json": to_json,
+    "markdown": to_markdown,
+    "md": to_markdown,
+    "stix": to_stix,
+    "misp": to_misp,
+}
+
+
+async def _run_report(
+    path: Path,
+    fmt: str,
+    out: Path | None,
+    use_cache: bool,
+) -> int:
+    if fmt not in _EXPORTERS:
+        choices = ", ".join(sorted(set(_EXPORTERS)))
+        console.print(f"[red]Unknown format[/] {fmt!r}; valid: {choices}")
+        return 2
+
+    iocs = extract_iocs(path.read_text(errors="replace"))
+    if not iocs:
+        console.print(f"[yellow]No IOCs found in[/] {path}")
+        return 0
+
+    settings = Settings.from_env()
+    cache = _open_cache(settings, use_cache)
+    try:
+        async with httpx.AsyncClient() as client:
+            engine = _build_engine(client, settings, cache)
+            if not engine.active_sources:
+                console.print("[red]No active sources — run `ioc-hunter configure`.[/]")
+                return 2
+            with console.status(f"Enriching {len(iocs)} IOC(s) for {fmt} report..."):
+                verdicts = await engine.lookup_many(iocs)
+    finally:
+        if cache is not None:
+            cache.close()
+
+    rendered = _EXPORTERS[fmt](verdicts)
+    if out is None:
+        print(rendered)
+    else:
+        out.write_text(rendered)
+        console.print(f"[green]Wrote[/] {out} ({len(rendered)} bytes)")
+    return 0
+
+
+@app.command(help="Enrich a file of IOCs and render JSON / Markdown / STIX / MISP.")
+def report(
+    path: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True, resolve_path=True),
+    fmt: str = typer.Option("markdown", "--format", "-f", help="json | markdown | stix | misp"),
+    out: Path | None = typer.Option(None, "--out", "-o", help="Write to file instead of stdout."),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Skip the SQLite cache."),
+) -> None:
+    exit_code = asyncio.run(_run_report(path, fmt, out, use_cache=not no_cache))
     raise typer.Exit(exit_code)
 
 
