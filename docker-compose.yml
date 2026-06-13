@@ -1,0 +1,12 @@
+services:
+  ioc-hunter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ioc-hunter:latest
+    container_name: ioc-hunter
+    env_file: .env
+    volumes:
+      - ./cache:/app/cache
+    stdin_open: true
+    tty: true

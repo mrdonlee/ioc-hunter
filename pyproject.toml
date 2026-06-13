@@ -1,0 +1,87 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ioc-hunter"
+version = "0.1.0"
+description = "Async threat intelligence correlation engine for SOC analysts. Auto-parses IOCs from raw text, queries multiple TI sources in parallel, scores them with a transparent weighted model, exports to STIX/MISP, and generates Sigma/Suricata detection rules."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "platinum2high" }]
+keywords = [
+    "security",
+    "threat-intelligence",
+    "ioc",
+    "soc",
+    "blue-team",
+    "siem",
+    "incident-response",
+    "stix",
+    "misp",
+    "sigma",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+]
+
+dependencies = [
+    "typer>=0.12.0",
+    "rich>=13.7.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.4.0",
+]
+
+[project.scripts]
+ioc-hunter = "ioc_hunter.cli:app"
+
+[project.urls]
+Repository = "https://github.com/platinum2high/ioc-hunter"
+Issues = "https://github.com/platinum2high/ioc-hunter/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ioc_hunter"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific
+]
+ignore = ["E501"] # line length handled by formatter
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"] # asserts in tests are fine
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-ra --strict-markers"
