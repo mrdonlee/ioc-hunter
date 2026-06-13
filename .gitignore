@@ -51,3 +51,9 @@ ioc_hunter_cache.db
 
 # Docker
 .docker/
+
+# Personal notes that shouldn't be public
+docs/promo*
+docs/medium*
+docs/draft*
+docs/notes*
