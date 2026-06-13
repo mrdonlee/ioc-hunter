@@ -41,8 +41,8 @@ coverage.xml
 *.swo
 .DS_Store
 
-# Project caches & data
-cache/
+# Project caches & data — only at the repo root, not the `cache` package
+/cache/
 *.db
 *.sqlite
 *.sqlite3
