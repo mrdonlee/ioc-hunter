@@ -428,7 +428,8 @@ def _entropy_bar(value: float, width: int = 10) -> str:
 _DOC_FORMATS = {FileFormat.PDF, FileFormat.OOXML, FileFormat.OLE, FileFormat.RTF}
 _PCAP_FORMATS = {FileFormat.PCAP}
 _ARCHIVE_FORMATS = {FileFormat.ARCHIVE}
-_NON_BINARY_FORMATS = _DOC_FORMATS | _PCAP_FORMATS | _ARCHIVE_FORMATS
+_EVTX_FORMATS = {FileFormat.EVTX}
+_NON_BINARY_FORMATS = _DOC_FORMATS | _PCAP_FORMATS | _ARCHIVE_FORMATS | _EVTX_FORMATS
 
 
 def _render_analyze_header(report: AnalyzerReport) -> None:
@@ -436,6 +437,7 @@ def _render_analyze_header(report: AnalyzerReport) -> None:
     is_doc = report.format in _DOC_FORMATS
     is_pcap = report.format in _PCAP_FORMATS
     is_archive = report.format in _ARCHIVE_FORMATS
+    is_evtx = report.format in _EVTX_FORMATS
     is_non_binary = report.format in _NON_BINARY_FORMATS
 
     # ---- Format line. Binaries get Arch / Bits; docs get the parser-
@@ -461,6 +463,11 @@ def _render_analyze_header(report: AnalyzerReport) -> None:
         kind = report.metadata.get("archive_kind") or "?"
         count = report.metadata.get("archive_member_count", 0)
         format_line += f"  [dim]Container:[/] {kind}  [dim]Members:[/] {count}"
+    elif is_evtx:
+        evtx_s = report.metadata.get("evtx_summary", {})
+        total = evtx_s.get("total_records", 0)
+        chunks = report.metadata.get("evtx_num_chunks", 0)
+        format_line += f"  [dim]Events:[/] {total:,}  [dim]Chunks:[/] {chunks}"
     else:
         format_line += (
             f"  [dim]Arch:[/] {report.architecture or '—'}  [dim]Bits:[/] {report.bitness or '—'}"
@@ -537,6 +544,8 @@ def _render_analyze_header(report: AnalyzerReport) -> None:
         title = "Document Analyzer"
     elif is_archive:
         title = "Archive Analyzer"
+    elif is_evtx:
+        title = "Windows Event Log Analyzer"
     else:
         title = "Binary Analyzer"
     console.print(Panel.fit("\n".join(lines), title=title, border_style=style))
@@ -798,6 +807,120 @@ def _render_analyze_pcap(report: AnalyzerReport) -> None:
         console.print(Panel.fit("\n".join(body_lines), title="Kerberos", border_style="cyan"))
 
 
+def _render_analyze_evtx(report: AnalyzerReport) -> None:
+    """Render EVTX-specific summary panels."""
+    summary = report.metadata.get("evtx_summary")
+    if not summary:
+        return
+
+    # ---- Overview panel --------------------------------------------------
+    total = summary.get("total_records", 0)
+    channel = summary.get("channel", "—")
+    computer = summary.get("computer", "—")
+    t_first = summary.get("time_first", "—")
+    t_last = summary.get("time_last", "—")
+    failed = summary.get("failed_logons", 0)
+    success = summary.get("successful_logons", 0)
+    cleared = summary.get("log_cleared", False)
+
+    body_lines = [
+        f"[dim]Records:[/]  {total:,}     [dim]Channel:[/] {_escape_markup(channel)}",
+        f"[dim]Computer:[/] {_escape_markup(computer)}",
+        f"[dim]From:[/]     {t_first}",
+        f"[dim]To:[/]       {t_last}",
+        f"[dim]Logons:[/]   {success:,} success  {failed:,} failed",
+    ]
+    if cleared:
+        body_lines.append("[bold red]LOG CLEARED[/] — event log clearing detected")
+
+    # Event ID distribution
+    eid_dist: dict[str, int] = summary.get("event_id_distribution", {})
+    if eid_dist:
+        top = sorted(eid_dist.items(), key=lambda x: -x[1])[:8]
+        body_lines.append(
+            "[dim]Top Event IDs:[/] "
+            + "  ".join(f"[cyan]{eid}[/]×{cnt}" for eid, cnt in top)
+        )
+
+    all_channels = summary.get("all_channels", [])
+    if len(all_channels) > 1:
+        shown = ", ".join(all_channels[:6])
+        extra = f", +{len(all_channels) - 6}" if len(all_channels) > 6 else ""
+        body_lines.append(f"[dim]Channels:[/] {_escape_markup(shown + extra)}")
+
+    console.print(Panel.fit("\n".join(body_lines), title="Windows Event Log", border_style="cyan"))
+
+    # ---- Source IPs --------------------------------------------------
+    src_ips: list[str] = summary.get("source_ips", [])
+    if src_ips:
+        table = Table(title="Source IPs (logon events)", box=SIMPLE)
+        table.add_column("IP Address", style="cyan")
+        for ip in src_ips[:20]:
+            table.add_row(ip)
+        if len(src_ips) > 20:
+            table.add_row(f"… +{len(src_ips) - 20} more")
+        console.print(table)
+
+    # ---- Kerberos RC4 tickets ----------------------------------------
+    krb_tickets: list[dict] = summary.get("kerberos_rc4_tickets", [])
+    if krb_tickets:
+        table = Table(title="Kerberoastable Service Tickets (RC4, Event 4769)", box=SIMPLE)
+        table.add_column("Timestamp", style="dim")
+        table.add_column("Service", style="cyan")
+        table.add_column("Client")
+        table.add_column("EType", style="yellow")
+        for t in krb_tickets[:20]:
+            table.add_row(
+                _escape_markup(t.get("timestamp", "?")),
+                _escape_markup(t.get("service", "?")),
+                _escape_markup(t.get("client", "?")),
+                _escape_markup(t.get("etype", "?")),
+            )
+        console.print(table)
+
+    # ---- New services ------------------------------------------------
+    services: list[dict] = summary.get("services_installed", [])
+    if services:
+        table = Table(title="Services Installed (Event 7045/4697)", box=SIMPLE)
+        table.add_column("Name", style="cyan")
+        table.add_column("Path", overflow="fold")
+        table.add_column("Timestamp", style="dim")
+        for svc in services[:20]:
+            table.add_row(
+                _escape_markup(svc.get("name", "?")),
+                _escape_markup(svc.get("path", "?")),
+                _escape_markup(svc.get("timestamp", "?")),
+            )
+        console.print(table)
+
+    # ---- Scheduled tasks ---------------------------------------------
+    sched_tasks: list[str] = summary.get("scheduled_tasks", [])
+    if sched_tasks:
+        table = Table(title="Scheduled Tasks Created (Event 4698)", box=SIMPLE)
+        table.add_column("Task Name", style="cyan", overflow="fold")
+        for task in sched_tasks[:20]:
+            table.add_row(_escape_markup(task))
+        console.print(table)
+
+    # ---- Suspicious command lines ------------------------------------
+    cmdlines: list[str] = summary.get("cmdlines", [])
+    if cmdlines:
+        table = Table(title="Suspicious Command Lines (Event 4688)", box=SIMPLE)
+        table.add_column("Command Line", overflow="fold")
+        for cmd in cmdlines[:10]:
+            table.add_row(_escape_markup(cmd))
+        console.print(table)
+
+    # ---- PowerShell script blocks ------------------------------------
+    ps_blocks: list[str] = summary.get("ps_script_blocks", [])
+    if ps_blocks:
+        table = Table(title="Suspicious PS Script Blocks (Event 4104)", box=SIMPLE)
+        table.add_column("Script Excerpt", overflow="fold")
+        for blk in ps_blocks[:6]:
+            table.add_row(_escape_markup(blk[:200]))
+        console.print(table)
+
+
 def _render_analyze_iocs(report: AnalyzerReport) -> None:
     if not report.iocs:
         return
@@ -925,6 +1048,7 @@ async def _run_analyze(
     _render_analyze_imports(report)
     _render_analyze_pcap(report)
     _render_analyze_archive(report)
+    _render_analyze_evtx(report)
     _render_analyze_findings(report)
     _render_analyze_iocs(report)
 

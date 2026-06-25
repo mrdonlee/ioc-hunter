@@ -86,6 +86,7 @@ class FileFormat(StrEnum):
     RTF = "rtf"  # Rich Text Format — usually carries OLE exploit objects
     PCAP = "pcap"  # libpcap classic + PCAPNG (both surface as PCAP)
     ARCHIVE = "archive"  # ZIP / TAR / GZIP / BZIP2 / XZ — recursively scanned
+    EVTX = "evtx"  # Windows XML Event Log (.evtx)
     UNKNOWN = "unknown"
 
 

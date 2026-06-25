@@ -34,6 +34,7 @@ from ioc_hunter.analyze.embedded import (
     scan_embedded,
     scan_shellcode_markers,
 )
+from ioc_hunter.analyze.evtx import EVTX_FILE_MAGIC, analyze_evtx
 from ioc_hunter.analyze.heuristics import apply_heuristics
 from ioc_hunter.analyze.macho import (
     FAT_CIGAM,
@@ -66,6 +67,8 @@ def detect_format(head: bytes) -> FileFormat:
     """
     if len(head) < 4:
         return FileFormat.UNKNOWN
+    if head[:8] == EVTX_FILE_MAGIC:
+        return FileFormat.EVTX
     if head[:2] == b"MZ":
         return FileFormat.PE
     if head[:4] == b"\x7fELF":
@@ -283,6 +286,8 @@ def _run(
                     message="Universal binary header malformed.",
                 )
             )
+    elif fmt == FileFormat.EVTX:
+        analyze_evtx(raw, report=report)
     elif is_tar(raw):
         # tar's magic lives at offset 257 so detect_format can't see it.
         report.format = FileFormat.ARCHIVE
@@ -297,12 +302,12 @@ def _run(
             )
         )
 
-    # For archives the container bytes are compressed noise plus member
-    # filenames; sweeping them yields junk "IOCs" (filenames parsed as
-    # domains) and redundant embedded-ZIP hits. The real IOCs/findings come
-    # from the per-member recursion, already merged into the report, so we
-    # skip the container-level passes here.
-    if report.format != FileFormat.ARCHIVE:
+    # Archives and EVTX skip the raw string sweep: archives because the
+    # compressed container bytes yield junk IOCs (member filenames parsed as
+    # domains); EVTX because the analyzer already extracted structured IOCs
+    # from decoded field values — sweeping the raw binary would add noise.
+    _skip_string_sweep = {FileFormat.ARCHIVE, FileFormat.EVTX}
+    if report.format not in _skip_string_sweep:
         # ---- Strings + IOC sweep — PDFs (FlateDecode JS), OOXML (decoded VBA
         # + embedded payloads), and OLE (decoded VBA) stash extra bytes in
         # `pdf_decoded_blob` so they flow into the IOC sweep here.

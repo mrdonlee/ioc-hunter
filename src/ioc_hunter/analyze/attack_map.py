@@ -155,6 +155,36 @@ _MAP: dict[str, tuple[str, ...]] = {
     "archive.encrypted_member": ("T1027", "T1027.002"),  # Obfuscation to evade AV
     "archive.member_malicious": ("T1027.009",),  # Embedded Payloads
     "archive.member_suspicious": ("T1027.009",),
+    # ---- EVTX / Windows Event Log analyzer (phase 14.4) -------------------
+    "evtx.security_log_cleared": ("T1070.001",),   # Clear Windows Event Logs
+    "evtx.system_log_cleared": ("T1070.001",),
+    "evtx.kerberoasting": ("T1558.003",),           # Kerberoasting
+    "evtx.asrep_roasting": ("T1558.004",),          # AS-REP Roasting
+    "evtx.bruteforce_logon": ("T1110",),            # Brute Force
+    "evtx.pass_spray": ("T1110.003",),              # Password Spraying
+    "evtx.success_after_failures": ("T1078", "T1110"),  # Valid Accounts after BF
+    "evtx.rdp_logon": ("T1021.001",),              # Remote Desktop Protocol
+    "evtx.network_logon": ("T1021.002",),          # SMB/Windows Admin Shares
+    "evtx.explicit_credential_logon": ("T1078",),  # Valid Accounts (explicit creds)
+    "evtx.lolbin_execution": ("T1218",),           # System Binary Proxy Execution
+    "evtx.encoded_powershell": ("T1027", "T1059.001"),  # Obfuscated PS
+    "evtx.suspicious_cmdline": ("T1059.001",),     # PowerShell
+    "evtx.suspicious_ps_script_block": ("T1059.001", "T1027"),  # PS + Obfuscation
+    "evtx.scheduled_task_created": ("T1053.005",), # Scheduled Task / Job
+    "evtx.new_service": ("T1543.003",),            # Windows Service
+    "evtx.account_created": ("T1136.001",),        # Create Local Account
+    "evtx.sensitive_group_change": ("T1098.001",), # Account Manipulation: Local Groups
+    "evtx.group_membership_change": ("T1098",),    # Account Manipulation
+    "evtx.admin_share_access": ("T1021.002", "T1570"),  # SMB + Lateral Tool Transfer
+    "evtx.privileged_logon": ("T1078.003",),       # Cloud Accounts / Local Admin
+    "evtx.lsass_access": ("T1003.001",),           # LSASS Memory
+    "evtx.sysmon_rare_port": ("T1571", "T1095"),   # Non-Standard Port / Non-App-Layer C2
+    "evtx.firewall_disabled": ("T1562.004",),      # Disable or Modify System Firewall
+    "evtx.account_lockout": ("T1110",),
+    "evtx.password_reset": ("T1098",),
+    "evtx.wmi_execution": ("T1047",),              # Windows Management Instrumentation
+    "evtx.registry_persistence": ("T1547.001",),  # Registry Run Keys / Startup Folder
+    "evtx.ntlm_auth": ("T1040", "T1557.001"),      # Network Sniffing / LLMNR
 }
 
 
