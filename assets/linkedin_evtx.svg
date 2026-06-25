@@ -1,0 +1,159 @@
+<svg width="1200" height="628" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', 'Inter', Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#161b22"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#e63946"/>
+      <stop offset="100%" stop-color="#c1121f"/>
+    </linearGradient>
+    <linearGradient id="cardgrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1c2128"/>
+      <stop offset="100%" stop-color="#161b22"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <!-- subtle dot grid -->
+    <pattern id="dots" x="0" y="0" width="30" height="30" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r="1" fill="#30363d" opacity="0.5"/>
+    </pattern>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="628" fill="url(#bg)"/>
+  <rect width="1200" height="628" fill="url(#dots)"/>
+
+  <!-- Left red accent bar -->
+  <rect x="0" y="0" width="6" height="628" fill="url(#accent)"/>
+
+  <!-- Top-left: logo mark -->
+  <!-- Shield shape -->
+  <path d="M72 48 L108 48 L108 88 Q90 100 72 88 Z" fill="none" stroke="#e63946" stroke-width="2.5" filter="url(#glow)"/>
+  <text x="90" y="82" text-anchor="middle" font-size="22" font-weight="700" fill="#e63946" filter="url(#glow)">⚡</text>
+
+  <!-- Project name -->
+  <text x="122" y="72" font-size="28" font-weight="700" fill="#ffffff" letter-spacing="3">IOC<tspan fill="#e63946">-</tspan>HUNTER</text>
+  <text x="122" y="94" font-size="13" fill="#8b949e" letter-spacing="5">OPEN SOURCE  ·  v0.14</text>
+
+  <!-- Divider -->
+  <rect x="54" y="116" width="540" height="1" fill="#30363d"/>
+
+  <!-- Main headline -->
+  <text x="54" y="172" font-size="42" font-weight="800" fill="#ffffff">Windows Event Log</text>
+  <text x="54" y="222" font-size="42" font-weight="800" fill="#e63946">Threat Detector</text>
+
+  <!-- Subtitle -->
+  <text x="54" y="268" font-size="18" fill="#8b949e">Zero-dependency EVTX analyzer — detects real attacks,</text>
+  <text x="54" y="292" font-size="18" fill="#8b949e">not just alerts. Maps to MITRE ATT&amp;CK automatically.</text>
+
+  <!-- Stat pills row -->
+  <!-- pill 1 -->
+  <rect x="54" y="320" width="148" height="38" rx="6" fill="#1c2128" stroke="#30363d" stroke-width="1"/>
+  <text x="128" y="344" text-anchor="middle" font-size="22" font-weight="800" fill="#e63946">25+</text>
+  <text x="128" y="356" text-anchor="middle" font-size="10" fill="#8b949e" letter-spacing="1">DETECTION RULES</text>
+
+  <!-- pill 2 -->
+  <rect x="214" y="320" width="148" height="38" rx="6" fill="#1c2128" stroke="#30363d" stroke-width="1"/>
+  <text x="288" y="344" text-anchor="middle" font-size="22" font-weight="800" fill="#58a6ff">653</text>
+  <text x="288" y="356" text-anchor="middle" font-size="10" fill="#8b949e" letter-spacing="1">TESTS PASSING</text>
+
+  <!-- pill 3 -->
+  <rect x="374" y="320" width="148" height="38" rx="6" fill="#1c2128" stroke="#30363d" stroke-width="1"/>
+  <text x="448" y="344" text-anchor="middle" font-size="22" font-weight="800" fill="#3fb950">0</text>
+  <text x="448" y="356" text-anchor="middle" font-size="10" fill="#8b949e" letter-spacing="1">DEPENDENCIES</text>
+
+  <!-- GitHub link -->
+  <text x="54" y="414" font-size="15" fill="#58a6ff">github.com/platinum2high/ioc-hunter</text>
+
+  <!-- ─────────────── RIGHT PANEL ─────────────── -->
+  <!-- Card background -->
+  <rect x="640" y="40" width="516" height="548" rx="12" fill="url(#cardgrad)" stroke="#30363d" stroke-width="1"/>
+
+  <!-- Card header -->
+  <rect x="640" y="40" width="516" height="52" rx="12" fill="#1c2128"/>
+  <rect x="640" y="80" width="516" height="12" fill="#1c2128"/>
+  <text x="665" y="72" font-size="13" font-weight="600" fill="#8b949e" letter-spacing="2">ATTACK COVERAGE</text>
+
+  <!-- Dot indicators in header -->
+  <circle cx="1118" cy="66" r="6" fill="#e63946" opacity="0.9"/>
+  <circle cx="1100" cy="66" r="6" fill="#d29922" opacity="0.9"/>
+  <circle cx="1082" cy="66" r="6" fill="#3fb950" opacity="0.9"/>
+
+  <!-- Detection rule rows -->
+  <!-- row helper: category label + technique chips -->
+
+  <!-- Credential Access -->
+  <text x="665" y="126" font-size="11" fill="#8b949e" letter-spacing="2">CREDENTIAL ACCESS</text>
+  <rect x="665" y="133" width="8" height="36" rx="2" fill="#e63946"/>
+  <text x="683" y="150" font-size="14" fill="#ffffff">Kerberoasting · AS-REP Roasting</text>
+  <text x="683" y="167" font-size="12" fill="#8b949e">Event 4769/4768  ·  EType 0x17 (RC4-HMAC)</text>
+  <rect x="985" y="137" width="70" height="18" rx="4" fill="#3d1c1c"/>
+  <text x="1020" y="150" text-anchor="middle" font-size="10" fill="#e63946" font-weight="600">T1558.003</text>
+
+  <!-- Separator -->
+  <rect x="665" y="180" width="462" height="1" fill="#21262d"/>
+
+  <!-- Lateral Movement -->
+  <text x="665" y="200" font-size="11" fill="#8b949e" letter-spacing="2">LATERAL MOVEMENT</text>
+  <rect x="665" y="207" width="8" height="36" rx="2" fill="#d29922"/>
+  <text x="683" y="224" font-size="14" fill="#ffffff">RDP · Admin Shares · PsExec pattern</text>
+  <text x="683" y="241" font-size="12" fill="#8b949e">Event 4624 / 4648 / 5140</text>
+  <rect x="985" y="211" width="70" height="18" rx="4" fill="#2d2208"/>
+  <text x="1020" y="224" text-anchor="middle" font-size="10" fill="#d29922" font-weight="600">T1021.001</text>
+
+  <!-- Separator -->
+  <rect x="665" y="254" width="462" height="1" fill="#21262d"/>
+
+  <!-- Execution -->
+  <text x="665" y="274" font-size="11" fill="#8b949e" letter-spacing="2">EXECUTION / EVASION</text>
+  <rect x="665" y="281" width="8" height="36" rx="2" fill="#58a6ff"/>
+  <text x="683" y="298" font-size="14" fill="#ffffff">LOLBins · Encoded PowerShell · WMI</text>
+  <text x="683" y="315" font-size="12" fill="#8b949e">Event 4688 / 4104  ·  Script-block logging</text>
+  <rect x="985" y="285" width="70" height="18" rx="4" fill="#0c1f3d"/>
+  <text x="1020" y="298" text-anchor="middle" font-size="10" fill="#58a6ff" font-weight="600">T1059.001</text>
+
+  <!-- Separator -->
+  <rect x="665" y="328" width="462" height="1" fill="#21262d"/>
+
+  <!-- Persistence -->
+  <text x="665" y="348" font-size="11" fill="#8b949e" letter-spacing="2">PERSISTENCE</text>
+  <rect x="665" y="355" width="8" height="36" rx="2" fill="#bc8cff"/>
+  <text x="683" y="372" font-size="14" fill="#ffffff">Scheduled Tasks · New Services · Run keys</text>
+  <text x="683" y="389" font-size="12" fill="#8b949e">Event 4698 / 7045 / 4657</text>
+  <rect x="985" y="359" width="70" height="18" rx="4" fill="#1e1433"/>
+  <text x="1020" y="372" text-anchor="middle" font-size="10" fill="#bc8cff" font-weight="600">T1053.005</text>
+
+  <!-- Separator -->
+  <rect x="665" y="402" width="462" height="1" fill="#21262d"/>
+
+  <!-- Defence Evasion -->
+  <text x="665" y="422" font-size="11" fill="#8b949e" letter-spacing="2">DEFENCE EVASION</text>
+  <rect x="665" y="429" width="8" height="36" rx="2" fill="#3fb950"/>
+  <text x="683" y="446" font-size="14" fill="#ffffff">Log Clearing · Firewall Disabled</text>
+  <text x="683" y="463" font-size="12" fill="#8b949e">Event 1102 / 4950  ·  attacker cleanup</text>
+  <rect x="985" y="433" width="70" height="18" rx="4" fill="#0d2116"/>
+  <text x="1020" y="446" text-anchor="middle" font-size="10" fill="#3fb950" font-weight="600">T1070.001</text>
+
+  <!-- Separator -->
+  <rect x="665" y="476" width="462" height="1" fill="#21262d"/>
+
+  <!-- Account -->
+  <text x="665" y="496" font-size="11" fill="#8b949e" letter-spacing="2">ACCOUNT MANIPULATION</text>
+  <rect x="665" y="503" width="8" height="36" rx="2" fill="#ff9500"/>
+  <text x="683" y="520" font-size="14" fill="#ffffff">New Users · Sensitive Group Changes</text>
+  <text x="683" y="537" font-size="12" fill="#8b949e">Event 4720 / 4728 / 4732 / 4756</text>
+  <rect x="985" y="507" width="70" height="18" rx="4" fill="#2a1800"/>
+  <text x="1020" y="520" text-anchor="middle" font-size="10" fill="#ff9500" font-weight="600">T1136.001</text>
+
+  <!-- Bottom bar of card -->
+  <rect x="640" y="558" width="516" height="30" rx="0" fill="#1c2128"/>
+  <rect x="640" y="558" width="516" height="30" rx="12" fill="#1c2128"/>
+  <rect x="640" y="558" width="516" height="18" fill="#1c2128"/>
+  <text x="898" y="578" text-anchor="middle" font-size="11" fill="#8b949e" letter-spacing="2">MITRE ATT&amp;CK MAPPED  ·  IOC PIPELINE  ·  SYSMON AWARE</text>
+
+  <!-- Bottom left: hashtags -->
+  <text x="54" y="580" font-size="13" fill="#30363d">#ThreatHunting  #DFIR  #BlueTeam  #SOC  #MITREAttack  #Python</text>
+</svg>

@@ -8,7 +8,7 @@
 [![CI](https://github.com/platinum2high/ioc-hunter/actions/workflows/ci.yml/badge.svg)](https://github.com/platinum2high/ioc-hunter/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Tests](https://img.shields.io/badge/tests-454%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-653%20passing-brightgreen)
 
 ---
 
@@ -60,6 +60,7 @@ they don't crash, just gracefully skip.
 | Document forensics | none | PDF / OOXML / OLE / RTF analyzer: PDF actions, MS-OVBA decompressor, Follina/template-injection, Equation Editor (CVE-2017-11882), OLE2Link (CVE-2017-0199), embedded payload extraction |
 | Network forensics | tcpdump-only | PCAP / PCAPNG analyzer: 5-tuple flows + top-talkers, DNS dissection, HTTP plaintext, **TLS ClientHello/ServerHello + JA3/JA3S fingerprints**, **SMB lateral movement + NetNTLMv2 capture**, **Kerberoasting / AS-REP roasting**, beaconing detection, DGA-shape DNS, DNS-tunneling, port scans, one-sided exfil, plaintext-credential leaks, ICMP tunnel |
 | Archive triage | unzip + re-scan by hand | **Recursive** ZIP / TAR / GZIP / BZIP2 / XZ analyzer — every member re-dispatched through the engine, child IOCs merged, zip-bomb / depth / encryption defences, phishing-cargo detection |
+| Windows Event Log | none | **EVTX analyzer** — zero-dependency binary parser; 25+ detection rules: Kerberoasting, AS-REP roasting, brute-force vs password-spray differentiation, lateral movement (RDP / admin shares / PsExec), LOLBins, encoded PowerShell, log clearing, new services / scheduled tasks / accounts, LSASS access (Sysmon), firewall disabled, registry persistence — all mapped to MITRE ATT&CK |
 
 ---
 
@@ -136,7 +137,7 @@ mounted as a volume so it survives across containers.
 ioc-hunter check <ioc>                       single IOC verdict
 ioc-hunter scan-file <path>                  extract + enrich every IOC in a file
 ioc-hunter parse-eml <path>                  phishing .eml — headers, body, attachments
-ioc-hunter analyze <path>                    static analysis of PE / ELF / Mach-O / PDF / OOXML / OLE / RTF / PCAP / PCAPNG / ZIP-TAR-GZIP archives
+ioc-hunter analyze <path>                    static analysis of PE / ELF / Mach-O / PDF / OOXML / OLE / RTF / PCAP / PCAPNG / EVTX / ZIP-TAR-GZIP archives
 ioc-hunter watch <path>                      tail a log file and alert on suspicious IOCs
 ioc-hunter correlate <path>                  shared-infra and shared-tag pivots
 ioc-hunter report <path> --format <fmt>      json | md | stix | misp | sigma | suricata
@@ -490,6 +491,62 @@ ioc-hunter analyze phishing-attachment.zip
   (`invoice.pdf.js`, `setup.exe` → `archive.executable_payload`) raise
   their own findings — the classic phishing-attachment shape
 
+### Analyze a Windows Event Log
+
+`ioc-hunter analyze` handles **EVTX** (Windows XML Event Log) with the
+same single command — zero external dependencies, no `python-evtx`, no
+`libevtx`. The parser walks the binary format from scratch: file header
+→ 64 KiB chunks → records → BinXML token stream (including
+TemplateInstance substitution), and decodes every value type —
+FILETIME, SID, GUID, UInt16/32/64, HexInt32/64, SYSTEMTIME — into
+human-readable strings.
+
+```bash
+ioc-hunter analyze security.evtx
+ioc-hunter analyze system.evtx
+```
+
+**25+ detection rules — the full attack kill chain**
+
+| Category | Rule | Event IDs | ATT&CK |
+| --- | --- | --- | --- |
+| Credential Access | Kerberoasting | 4769 EType=0x17 | T1558.003 |
+| Credential Access | AS-REP Roasting | 4768 EType=0x17 | T1558.004 |
+| Credential Access | Brute-force logon | 4625 ≥10 failures | T1110 |
+| Credential Access | Password spray | 4625 same-pass many users | T1110.003 |
+| Credential Access | Success after failures | 4624 after 4625 burst | T1078, T1110 |
+| Credential Access | Account lockout | 4740 | T1110 |
+| Credential Access | LSASS access (Sysmon) | Event 10 | T1003.001 |
+| Lateral Movement | RDP logon | 4624 LogonType=10 | T1021.001 |
+| Lateral Movement | Network logon | 4624 LogonType=3 | T1021.002 |
+| Lateral Movement | Explicit-credential logon | 4648 | T1078 |
+| Lateral Movement | Admin share access | 5140 ADMIN$/C$ | T1021.002, T1570 |
+| Execution | LOLBin execution | 4688 image name | T1218 |
+| Execution | Encoded PowerShell | 4688 `-enc` in cmdline | T1027, T1059.001 |
+| Execution | WMI execution | 4688 wmic.exe | T1047 |
+| Execution | Script-block logging | 4104 | T1059.001 |
+| Persistence | Scheduled task created | 4698 | T1053.005 |
+| Persistence | New service installed | 7045 / 4697 | T1543.003 |
+| Persistence | Registry Run-key write | 4657 CurrentVersion\Run | T1547.001 |
+| Defence Evasion | Security log cleared | 1102 | T1070.001 |
+| Defence Evasion | Firewall disabled | 4950 | T1562.004 |
+| Account Manipulation | New local user | 4720 | T1136.001 |
+| Account Manipulation | Sensitive group change | 4728 / 4732 / 4756 | T1098.001 |
+| Privilege Escalation | Privileged logon | 4672 non-SYSTEM | T1078.003 |
+| Command & Control | Sysmon rare-port outbound | Sysmon Event 3 | T1571 |
+
+**IOC pipeline integration** — IP addresses from logon events and URLs
+extracted from PowerShell script blocks (Event 4104) flow automatically
+into the standard TI sweep. Raw binary sweep is skipped for EVTX to
+avoid noise from the binary container format.
+
+**Summary panel** — the CLI renders an overview card (total records,
+time window, channel, computer), a source-IP table from logon events,
+Kerberoastable ticket details, new services and scheduled tasks, and
+suspicious command lines in one pass.
+
+---
+
 ### Watch a log file live
 
 ```bash
@@ -647,7 +704,7 @@ Every push to `main` redeploys automatically. Health endpoint at
 | `exporters/` | JSON, Markdown, STIX 2.1, MISP Event |
 | `rules/` | Sigma + Suricata generators with severity floor |
 | `decoder/` | CyberChef-style operations + magic auto-detect |
-| `analyze/` | Static PE / ELF / Mach-O / PDF / OOXML / OLE / RTF / PCAP / PCAPNG + recursive archive analyzer + MS-OVBA decompressor + JA3/JA3S fingerprinting + SMB/NTLM/Kerberos dissection + ATT&CK map |
+| `analyze/` | Static PE / ELF / Mach-O / PDF / OOXML / OLE / RTF / PCAP / PCAPNG / **EVTX** + recursive archive analyzer + MS-OVBA decompressor + JA3/JA3S fingerprinting + SMB/NTLM/Kerberos dissection + ATT&CK map |
 | `cli.py` | Rich-powered terminal UI |
 
 ---
@@ -695,8 +752,9 @@ All planned phases done.
 | 14.2b — RTF analyzer (Equation Editor, OLE2Link), OLE subtype detection, CLI polish | ✅ |
 | 14.3a — PCAP / PCAPNG analyzer (flows, DNS/HTTP/TLS+JA3, beaconing, DGA, exfil, plaintext-creds) | ✅ |
 | 14.3b — JA3S + SMB/NTLM (NetNTLMv2 capture) + Kerberos (Kerberoast / AS-REP roast) + TLS anomalies + **recursive archive scan** | ✅ |
+| 14.4 — **EVTX Windows Event Log analyzer**: zero-dependency BinXML parser + 25+ ATT&CK-mapped detection rules (Kerberoasting, brute-force, lateral movement, LOLBins, persistence, defence evasion) | ✅ |
 
-**570 tests, all green.** CI runs the full matrix (Python 3.11 + 3.12),
+**653 tests, all green.** CI runs the full matrix (Python 3.11 + 3.12),
 Docker build, `ruff` lint + format check, and `gitleaks` secret scan on
 every push.
 
