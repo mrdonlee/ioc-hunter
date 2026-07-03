@@ -71,14 +71,16 @@ they don't crash, just gracefully skip.
 ```bash
 git clone https://github.com/platinum2high/ioc-hunter
 cd ioc-hunter
-python -m venv .venv
-source .venv/bin/activate            # Windows: .venv\Scripts\activate
+uv sync # Using uv
+python -m venv .venv # Using pyhton
+source .venv/bin/activate # Windows: .venv\Scripts\activate
 ```
 
 ### 2. Install the package
 
 ```bash
-pip install -e .
+uv tool install . # Using uv
+pip install -e . # Using pip
 ```
 
 This pulls in 4 runtime dependencies (`httpx`, `typer`, `rich`,
@@ -627,8 +629,8 @@ next request (~30 s cold start).
 ### Run it locally
 
 ```bash
-pip install -e ".[web]"
-uvicorn ioc_hunter.web:app --host 0.0.0.0 --port 8000
+uv sync --extra web
+uv run uvicorn ioc_hunter.web:app --host 0.0.0.0 --port 8000
 # → http://localhost:8000
 ```
 
