@@ -838,8 +838,7 @@ def _render_analyze_evtx(report: AnalyzerReport) -> None:
     if eid_dist:
         top = sorted(eid_dist.items(), key=lambda x: -x[1])[:8]
         body_lines.append(
-            "[dim]Top Event IDs:[/] "
-            + "  ".join(f"[cyan]{eid}[/]×{cnt}" for eid, cnt in top)
+            "[dim]Top Event IDs:[/] " + "  ".join(f"[cyan]{eid}[/] x{cnt}" for eid, cnt in top)
         )
 
     all_channels = summary.get("all_channels", [])

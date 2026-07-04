@@ -48,9 +48,9 @@ EVTX_RECORD_MAGIC = b"\x2a\x2a\x00\x00"  # LE dword 0x00002a2a
 
 EVTX_FILE_HEADER_SIZE = 4096
 EVTX_CHUNK_SIZE = 65536
-EVTX_CHUNK_HEADER_PRIMARY = 128   # first 128 bytes of chunk header
-EVTX_CHUNK_HEADER_TOTAL = 512     # full header block size
-EVTX_RECORD_HEADER_SIZE = 24      # magic(4) + size(4) + record_id(8) + filetime(8)
+EVTX_CHUNK_HEADER_PRIMARY = 128  # first 128 bytes of chunk header
+EVTX_CHUNK_HEADER_TOTAL = 512  # full header block size
+EVTX_RECORD_HEADER_SIZE = 24  # magic(4) + size(4) + record_id(8) + filetime(8)
 
 # Hard caps — protect against hostile/corrupted input
 _MAX_RECORDS = 2_000_000
@@ -61,15 +61,35 @@ _MAX_FIELD_LEN = 4096
 # Windows FILETIME epoch offset vs Unix epoch (seconds)
 _FILETIME_EPOCH_DIFF = 11644473600
 
+# Named-pipe patterns used in token-impersonation attacks (Sysmon Events 17/18)
+_LSASS_PIPES: frozenset[str] = frozenset({r"\lsass", r"\\lsass"})
+_SUSPICIOUS_PIPE_DIRS: tuple[str, ...] = (
+    "\\temp\\",
+    "\\tmp\\",
+    "\\appdata\\local\\temp\\",
+    "\\users\\public\\",
+    "\\programdata\\",
+)
+
+# CreateRemoteThread source-image allow-list (Sysmon Event 8)
+_INJECTION_WHITELIST_SRC: frozenset[str] = frozenset(
+    {
+        "c:\\windows\\system32\\werfault.exe",
+        "c:\\windows\\system32\\wermgr.exe",
+    }
+)
+
 # ---------------------------------------------------------------------------
 # BinXML token identifiers
 # ---------------------------------------------------------------------------
 
 _TOK_EOF = 0x00
 _TOK_OPEN_ELEM = 0x01
-_TOK_CLOSE_ELEM = 0x02   # CloseStartElement (closes opening tag `>`; in fixtures also used as CloseElement)
+_TOK_CLOSE_ELEM = (
+    0x02  # CloseStartElement (closes opening tag `>`; in fixtures also used as CloseElement)
+)
 _TOK_CLOSE_EMPTY = 0x03  # CloseEmptyElement (`/>`)
-_TOK_END_ELEM = 0x04     # EndElement (`</tag>`) — real EVTX only
+_TOK_END_ELEM = 0x04  # EndElement (`</tag>`) — real EVTX only
 _TOK_VALUE = 0x05
 _TOK_ATTR = 0x06
 _TOK_TMPL_INST = 0x0C
@@ -93,7 +113,7 @@ _VT_SYSTEMTIME = 0x12
 _VT_SID = 0x13
 _VT_HEX32 = 0x14
 _VT_HEX64 = 0x15
-_VT_BXML  = 0x21  # embedded BinXML (EventData section)
+_VT_BXML = 0x21  # embedded BinXML (EventData section)
 
 # Flag: value is null (bit 7 of the flags byte in descriptor)
 _FLAG_NULL = 0x80
@@ -105,24 +125,24 @@ _FLAG_NULL = 0x80
 # ---------------------------------------------------------------------------
 
 _SYSTEM_SUBST: dict[int, str] = {
-    0: "Provider",          # Provider/@Name
-    1: "ProviderGuid",      # Provider/@Guid
-    2: "Qualifiers",        # EventID/@Qualifiers
-    3: "EventID",           # EventID content
+    0: "Provider",  # Provider/@Name
+    1: "ProviderGuid",  # Provider/@Guid
+    2: "Qualifiers",  # EventID/@Qualifiers
+    3: "EventID",  # EventID content
     4: "Version",
     5: "Level",
     6: "Task",
     7: "Opcode",
     8: "Keywords",
-    9: "TimeCreated",       # TimeCreated/@SystemTime
+    9: "TimeCreated",  # TimeCreated/@SystemTime
     10: "EventRecordID",
-    11: "ActivityID",       # Correlation/@ActivityID (optional)
+    11: "ActivityID",  # Correlation/@ActivityID (optional)
     12: "RelatedActivityID",
-    13: "ProcessID",        # Execution/@ProcessID
-    14: "ThreadID",         # Execution/@ThreadID
+    13: "ProcessID",  # Execution/@ProcessID
+    14: "ThreadID",  # Execution/@ThreadID
     15: "Channel",
     16: "Computer",
-    17: "UserID",           # Security/@UserID (SID, optional)
+    17: "UserID",  # Security/@UserID (SID, optional)
 }
 
 # ---------------------------------------------------------------------------
@@ -135,14 +155,14 @@ class _EvtxEvent:
     """One fully-decoded Windows Event Log record."""
 
     record_id: int
-    filetime: int           # raw Windows FILETIME (100-ns since 1601-01-01 UTC)
-    timestamp: str          # ISO 8601 UTC, e.g. "2024-12-01T08:23:11Z"
-    event_id: int           # numeric EventID
-    level: int              # 0=Log Always, 1=Critical, 2=Error, 3=Warning, 4=Info
-    channel: str            # "Security", "System", ...
+    filetime: int  # raw Windows FILETIME (100-ns since 1601-01-01 UTC)
+    timestamp: str  # ISO 8601 UTC, e.g. "2024-12-01T08:23:11Z"
+    event_id: int  # numeric EventID
+    level: int  # 0=Log Always, 1=Critical, 2=Error, 3=Warning, 4=Info
+    channel: str  # "Security", "System", ...
     computer: str
-    provider: str           # e.g. "Microsoft-Windows-Security-Auditing"
-    user_sid: str           # S-1-5-… or ""
+    provider: str  # e.g. "Microsoft-Windows-Security-Auditing"
+    user_sid: str  # S-1-5-… or ""
     process_id: int
     thread_id: int
     fields: dict[str, str]  # EventData key→value (and leftover System fields)
@@ -241,7 +261,7 @@ def _binxml_name(data: bytes, offset: int) -> str:
     """Read a BinXML element/attribute name from an absolute offset.
 
     Name layout (NameStringNode): next_offset(4) + hash(2) + length_chars(2)
-                                  + UTF-16LE chars (length_chars × 2) + null(2)
+                                  + UTF-16LE chars (length_chars x 2) + null(2)
     """
     if offset + 8 > len(data):
         return ""
@@ -271,9 +291,7 @@ def _parse_sid(data: bytes) -> str:
     authority = int.from_bytes(data[2:8], "big")
     if len(data) < 8 + sub_count * 4:
         return ""
-    subs = [
-        struct.unpack_from("<I", data, 8 + i * 4)[0] for i in range(sub_count)
-    ]
+    subs = [struct.unpack_from("<I", data, 8 + i * 4)[0] for i in range(sub_count)]
     return "S-{}-{}-{}".format(revision, authority, "-".join(str(s) for s in subs))
 
 
@@ -391,8 +409,8 @@ def _read_typed_value(r: _Cursor, vtype: int) -> str:
 
 @dataclass(slots=True)
 class _TemplateInfo:
-    field_map: dict[int, str]       # subst_id → field_name
-    data_name_map: dict[int, str]   # subst_id → EventData Name attribute value
+    field_map: dict[int, str]  # subst_id → field_name
+    data_name_map: dict[int, str]  # subst_id → EventData Name attribute value
     literal_fields: dict[str, str]  # canonical field_name → literal value from template
 
 
@@ -428,7 +446,7 @@ def _parse_template_binxml(
         cur_chunk_pos = binxml_start + r.pos
         if name_off >= cur_chunk_pos and name_off + 8 <= len(chunk):
             (ns_len,) = struct.unpack_from("<H", chunk, name_off + 6)
-            # NameStringNode: next_off(4)+hash(2)+len(2)+name(ns_len×2)+null(2)
+            # NameStringNode: next_off(4)+hash(2)+len(2)+name(ns_len x 2)+null(2)
             r.skip(10 + ns_len * 2)
 
     while r.remaining > 0:
@@ -441,14 +459,14 @@ def _parse_template_binxml(
 
         elif tok in (_TOK_OPEN_ELEM, 0x41):  # OpenStartElement (plain / with flag)
             has_flag = bool(tok & 0x40)
-            r.skip(2)   # dep_id
-            r.skip(4)   # data_size
+            r.skip(2)  # dep_id
+            r.skip(4)  # data_size
             name_off = r.u32()
             if name_off is None:
                 break
             _skip_inline_name(name_off)
             if has_flag:
-                r.skip(4)   # extra 4 flag bytes present on 0x41 tokens
+                r.skip(4)  # extra 4 flag bytes present on 0x41 tokens
             name = _binxml_name(chunk, name_off)
             elem_stack.append(name)
             pending_data_name = ""
@@ -501,7 +519,9 @@ def _parse_template_binxml(
 
         # Any other token: skip (CharRef, EntityRef, PI, CData, …)
 
-    return _TemplateInfo(field_map=field_map, data_name_map=data_name_map, literal_fields=literal_fields)
+    return _TemplateInfo(
+        field_map=field_map, data_name_map=data_name_map, literal_fields=literal_fields
+    )
 
 
 def _subst_context_name(elem: str, attr: str) -> str:
@@ -626,9 +646,9 @@ def _parse_event_binxml(
                 break
 
         elif tok == _TOK_OPEN_ELEM:
-            if not r.skip(2):   # dep_id
+            if not r.skip(2):  # dep_id
                 break
-            if not r.skip(4):   # data_size
+            if not r.skip(4):  # data_size
                 break
             name_off = r.u32()
             if name_off is None:
@@ -743,8 +763,8 @@ def _parse_bxml_blob(
     if tok != _TOK_TMPL_INST:
         return
 
-    r.skip(1)   # unknown
-    r.skip(4)   # template_id
+    r.skip(1)  # unknown
+    r.skip(4)  # template_id
     tmpl_offset = r.u32()
     if tmpl_offset is None:
         return
@@ -807,14 +827,14 @@ def _apply_template_instance(
     now sits in the chunk), it is embedded inline and must be skipped:
       TemplateNode header(24) + BinXML(data_length)
     After that comes the substitution array:
-      sub_count(4) + sub_count × descriptor(4) + value blob
+      sub_count(4) + sub_count x descriptor(4) + value blob
     """
     unknown = r.u8()
     if unknown is None:
         return
     if not r.skip(4):  # template_id (first 4 bytes of GUID, used as a lookup key)
         return
-    data_offset = r.u32()   # chunk-relative offset to template def node
+    data_offset = r.u32()  # chunk-relative offset to template def node
     if data_offset is None:
         return
 
@@ -842,7 +862,7 @@ def _apply_template_instance(
 
     # Read all value data in one block
     total = sum(d[0] for d in descriptors)
-    value_blob_chunk_start = binxml_start + r.pos   # chunk-relative start of value blob
+    value_blob_chunk_start = binxml_start + r.pos  # chunk-relative start of value blob
     value_blob = r.read(total)
     if value_blob is None:
         return
@@ -1001,41 +1021,102 @@ def _decode_record(
 # ---------------------------------------------------------------------------
 
 # LOLBins — binaries routinely abused for living-off-the-land execution
-_LOLBINS: frozenset[str] = frozenset({
-    "certutil.exe", "mshta.exe", "wscript.exe", "cscript.exe",
-    "regsvr32.exe", "regsvcs.exe", "regasm.exe", "installutil.exe",
-    "msiexec.exe", "wmic.exe", "powershell.exe", "pwsh.exe",
-    "rundll32.exe", "schtasks.exe", "at.exe",
-    "bitsadmin.exe", "msdt.exe", "odbcconf.exe", "cmstp.exe",
-    "msbuild.exe", "dnscmd.exe", "pcalua.exe", "xwizard.exe",
-    "appsyncpublishingserver.exe", "presentationhost.exe",
-    "syncappvpublishingserver.exe", "infdefaultinstall.exe",
-    "ieexec.exe", "msdeploy.exe", "bginfo.exe", "csi.exe",
-    "dnsclient.exe", "ftp.exe", "bash.exe", "wsl.exe",
-    "diskshadow.exe", "esentutl.exe", "expand.exe",
-    "extrac32.exe", "findstr.exe", "forfiles.exe", "hh.exe",
-    "makecab.exe", "mavinject.exe", "microsoft.workflow.compiler.exe",
-    "mmc.exe", "mtstocom.exe", "nltest.exe",
-    "ntdsutil.exe", "cfc.exe", "reg.exe", "regsvc.exe",
-    "replace.exe", "rpcping.exe", "runscripthelper.exe",
-    "sc.exe", "scriptrunner.exe", "wab.exe", "wfc.exe",
-    "winrm.cmd", "aspnet_compiler.exe", "adplus.exe",
-})
+_LOLBINS: frozenset[str] = frozenset(
+    {
+        "certutil.exe",
+        "mshta.exe",
+        "wscript.exe",
+        "cscript.exe",
+        "regsvr32.exe",
+        "regsvcs.exe",
+        "regasm.exe",
+        "installutil.exe",
+        "msiexec.exe",
+        "wmic.exe",
+        "powershell.exe",
+        "pwsh.exe",
+        "rundll32.exe",
+        "schtasks.exe",
+        "at.exe",
+        "bitsadmin.exe",
+        "msdt.exe",
+        "odbcconf.exe",
+        "cmstp.exe",
+        "msbuild.exe",
+        "dnscmd.exe",
+        "pcalua.exe",
+        "xwizard.exe",
+        "appsyncpublishingserver.exe",
+        "presentationhost.exe",
+        "syncappvpublishingserver.exe",
+        "infdefaultinstall.exe",
+        "ieexec.exe",
+        "msdeploy.exe",
+        "bginfo.exe",
+        "csi.exe",
+        "dnsclient.exe",
+        "ftp.exe",
+        "bash.exe",
+        "wsl.exe",
+        "diskshadow.exe",
+        "esentutl.exe",
+        "expand.exe",
+        "extrac32.exe",
+        "findstr.exe",
+        "forfiles.exe",
+        "hh.exe",
+        "makecab.exe",
+        "mavinject.exe",
+        "microsoft.workflow.compiler.exe",
+        "mmc.exe",
+        "mtstocom.exe",
+        "nltest.exe",
+        "ntdsutil.exe",
+        "cfc.exe",
+        "reg.exe",
+        "regsvc.exe",
+        "replace.exe",
+        "rpcping.exe",
+        "runscripthelper.exe",
+        "sc.exe",
+        "scriptrunner.exe",
+        "wab.exe",
+        "wfc.exe",
+        "winrm.cmd",
+        "aspnet_compiler.exe",
+        "adplus.exe",
+    }
+)
 
 # Sensitive privileged groups (SID well-known RIDs)
-_SENSITIVE_GROUPS: frozenset[str] = frozenset({
-    "Domain Admins", "Enterprise Admins", "Schema Admins",
-    "Administrators", "Account Operators", "Backup Operators",
-    "Print Operators", "Server Operators", "Group Policy Creator Owners",
-    "Remote Desktop Users", "Network Configuration Operators",
-    "BUILTIN\\Administrators",
-})
+_SENSITIVE_GROUPS: frozenset[str] = frozenset(
+    {
+        "Domain Admins",
+        "Enterprise Admins",
+        "Schema Admins",
+        "Administrators",
+        "Account Operators",
+        "Backup Operators",
+        "Print Operators",
+        "Server Operators",
+        "Group Policy Creator Owners",
+        "Remote Desktop Users",
+        "Network Configuration Operators",
+        "BUILTIN\\Administrators",
+    }
+)
 
 # RC4 / DES encryption types — targets for Kerberoasting / AS-REP roasting
-_WEAK_KERBEROS_ETYPES: frozenset[str] = frozenset({
-    "0x17", "0x18", "0x3",   # RC4-HMAC, RC4-HMAC-EXP, DES-CBC-MD5
-    "23", "24", "3",          # decimal forms
-})
+_WEAK_KERBEROS_ETYPES: frozenset[str] = frozenset(
+    {
+        "0x17",
+        "0x18",
+        "0x3",  # RC4-HMAC, RC4-HMAC-EXP, DES-CBC-MD5
+        "23",
+        "24",
+        "3",  # decimal forms
+    }
+)
 
 # Suspicious PowerShell patterns (in script block text or cmdlines)
 _PS_SUSPICIOUS_RE = re.compile(
@@ -1072,9 +1153,12 @@ _ENCODED_CMDLINE_RE = re.compile(
 )
 
 # LSASS / credential dumping process targets (Sysmon Event 10)
-_CRED_TARGETS: frozenset[str] = frozenset({
-    "lsass.exe", "lsaiso.exe",
-})
+_CRED_TARGETS: frozenset[str] = frozenset(
+    {
+        "lsass.exe",
+        "lsaiso.exe",
+    }
+)
 
 
 def _basename(path: str) -> str:
@@ -1111,25 +1195,29 @@ def _detect(events: list[_EvtxEvent], report: AnalyzerReport) -> None:
     # -----------------------------------------------------------------
     # 1. Log clearing — immediately suspicious, always CRITICAL
     # -----------------------------------------------------------------
-    for ev in by_id.get(1102, []):    # Security audit log cleared
-        report.add(Finding(
-            rule="evtx.security_log_cleared",
-            severity=Severity.CRITICAL,
-            category="defence_evasion",
-            message="Security audit log cleared (Event 1102). Attacker erasing tracks.",
-            evidence=(ev.timestamp, ev.fields.get("SubjectUserName", "?")),
-        ))
+    for ev in by_id.get(1102, []):  # Security audit log cleared
+        report.add(
+            Finding(
+                rule="evtx.security_log_cleared",
+                severity=Severity.CRITICAL,
+                category="defence_evasion",
+                message="Security audit log cleared (Event 1102). Attacker erasing tracks.",
+                evidence=(ev.timestamp, ev.fields.get("SubjectUserName", "?")),
+            )
+        )
 
     # System log cleared (Event 104 in System channel)
     for ev in by_id.get(104, []):
         if "System" in ev.channel or ev.provider.endswith("Eventlog"):
-            report.add(Finding(
-                rule="evtx.system_log_cleared",
-                severity=Severity.CRITICAL,
-                category="defence_evasion",
-                message="System event log cleared (Event 104).",
-                evidence=(ev.timestamp,),
-            ))
+            report.add(
+                Finding(
+                    rule="evtx.system_log_cleared",
+                    severity=Severity.CRITICAL,
+                    category="defence_evasion",
+                    message="System event log cleared (Event 104).",
+                    evidence=(ev.timestamp,),
+                )
+            )
 
     # -----------------------------------------------------------------
     # 2. Credential access — Kerberoasting (Event 4769, RC4 service ticket)
@@ -1139,27 +1227,31 @@ def _detect(events: list[_EvtxEvent], report: AnalyzerReport) -> None:
         etype = ev.fields.get("TicketEncryptionType", "")
         svc = ev.fields.get("ServiceName", "")
         if etype in _WEAK_KERBEROS_ETYPES and svc and not svc.endswith("$"):
-            kerberoast_tickets.append({
-                "timestamp": ev.timestamp,
-                "service": svc,
-                "client": ev.fields.get("TargetUserName", "?"),
-                "etype": etype,
-                "src_ip": ev.fields.get("IpAddress", ""),
-            })
+            kerberoast_tickets.append(
+                {
+                    "timestamp": ev.timestamp,
+                    "service": svc,
+                    "client": ev.fields.get("TargetUserName", "?"),
+                    "etype": etype,
+                    "src_ip": ev.fields.get("IpAddress", ""),
+                }
+            )
     if kerberoast_tickets:
-        report.add(Finding(
-            rule="evtx.kerberoasting",
-            severity=Severity.HIGH,
-            category="credential_access",
-            message=(
-                f"Kerberoasting detected: {len(kerberoast_tickets)} RC4 service ticket(s) "
-                "requested (Event 4769). Crackable offline."
-            ),
-            evidence=tuple(
-                f"{t['service']} by {t['client']} at {t['timestamp']}"
-                for t in kerberoast_tickets[:6]
-            ),
-        ))
+        report.add(
+            Finding(
+                rule="evtx.kerberoasting",
+                severity=Severity.HIGH,
+                category="credential_access",
+                message=(
+                    f"Kerberoasting detected: {len(kerberoast_tickets)} RC4 service ticket(s) "
+                    "requested (Event 4769). Crackable offline."
+                ),
+                evidence=tuple(
+                    f"{t['service']} by {t['client']} at {t['timestamp']}"
+                    for t in kerberoast_tickets[:6]
+                ),
+            )
+        )
 
     # -----------------------------------------------------------------
     # 3. AS-REP Roasting (Event 4768, RC4/no-preauth)
@@ -1168,31 +1260,33 @@ def _detect(events: list[_EvtxEvent], report: AnalyzerReport) -> None:
     for ev in by_id.get(4768, []):
         etype = ev.fields.get("TicketEncryptionType", "")
         if etype in _WEAK_KERBEROS_ETYPES:
-            asrep_tickets.append({
-                "timestamp": ev.timestamp,
-                "client": ev.fields.get("TargetUserName", "?"),
-                "etype": etype,
-                "src_ip": ev.fields.get("IpAddress", ""),
-            })
+            asrep_tickets.append(
+                {
+                    "timestamp": ev.timestamp,
+                    "client": ev.fields.get("TargetUserName", "?"),
+                    "etype": etype,
+                    "src_ip": ev.fields.get("IpAddress", ""),
+                }
+            )
     if asrep_tickets:
-        report.add(Finding(
-            rule="evtx.asrep_roasting",
-            severity=Severity.HIGH,
-            category="credential_access",
-            message=(
-                f"AS-REP Roasting: {len(asrep_tickets)} RC4 AS ticket(s) issued (Event 4768). "
-                "Indicates accounts with Kerberos pre-auth disabled."
-            ),
-            evidence=tuple(
-                f"{t['client']} at {t['timestamp']}" for t in asrep_tickets[:6]
-            ),
-        ))
+        report.add(
+            Finding(
+                rule="evtx.asrep_roasting",
+                severity=Severity.HIGH,
+                category="credential_access",
+                message=(
+                    f"AS-REP Roasting: {len(asrep_tickets)} RC4 AS ticket(s) issued (Event 4768). "
+                    "Indicates accounts with Kerberos pre-auth disabled."
+                ),
+                evidence=tuple(f"{t['client']} at {t['timestamp']}" for t in asrep_tickets[:6]),
+            )
+        )
 
     # -----------------------------------------------------------------
     # 4. Brute force / password spray (Event 4625 — failed logon)
     # -----------------------------------------------------------------
-    fails_by_src: dict[str, set[str]] = defaultdict(set)   # src_ip → {usernames}
-    fails_by_user: dict[str, int] = Counter()               # username → count
+    fails_by_src: dict[str, set[str]] = defaultdict(set)  # src_ip → {usernames}
+    fails_by_user: dict[str, int] = Counter()  # username → count
 
     for ev in by_id.get(4625, []):
         user = ev.fields.get("TargetUserName", "?")
@@ -1202,149 +1296,157 @@ def _detect(events: list[_EvtxEvent], report: AnalyzerReport) -> None:
         fails_by_user[user] += 1
 
     # Password spray: one source hitting many distinct accounts
-    spray_sources = {
-        ip: users for ip, users in fails_by_src.items()
-        if len(users) >= 5
-    }
+    spray_sources = {ip: users for ip, users in fails_by_src.items() if len(users) >= 5}
     if spray_sources:
         worst_ip = max(spray_sources, key=lambda ip: len(spray_sources[ip]))
-        report.add(Finding(
-            rule="evtx.pass_spray",
-            severity=Severity.HIGH,
-            category="credential_access",
-            message=(
-                f"Password spray from {len(spray_sources)} source(s). "
-                f"Worst offender: {worst_ip} → {len(spray_sources[worst_ip])} distinct accounts."
-            ),
-            evidence=tuple(spray_sources.keys())[:6],
-        ))
+        report.add(
+            Finding(
+                rule="evtx.pass_spray",
+                severity=Severity.HIGH,
+                category="credential_access",
+                message=(
+                    f"Password spray from {len(spray_sources)} source(s). "
+                    f"Worst offender: {worst_ip} → {len(spray_sources[worst_ip])} distinct accounts."
+                ),
+                evidence=tuple(spray_sources.keys())[:6],
+            )
+        )
 
     # Brute force: many failures for same account
     brute_users = [(u, c) for u, c in fails_by_user.items() if c >= 10]
     if brute_users:
         worst_user, worst_count = max(brute_users, key=lambda x: x[1])
-        report.add(Finding(
-            rule="evtx.bruteforce_logon",
-            severity=Severity.HIGH,
-            category="credential_access",
-            message=(
-                f"Brute-force detected: {worst_count} failed logons for '{worst_user}' "
-                f"(Event 4625). {len(brute_users)} account(s) targeted."
-            ),
-            evidence=tuple(f"{u}({c})" for u, c in brute_users[:6]),
-        ))
+        report.add(
+            Finding(
+                rule="evtx.bruteforce_logon",
+                severity=Severity.HIGH,
+                category="credential_access",
+                message=(
+                    f"Brute-force detected: {worst_count} failed logons for '{worst_user}' "
+                    f"(Event 4625). {len(brute_users)} account(s) targeted."
+                ),
+                evidence=tuple(f"{u}({c})" for u, c in brute_users[:6]),
+            )
+        )
 
     # -----------------------------------------------------------------
     # 5. Successful logon after failures (credential stuffing)
     # -----------------------------------------------------------------
     if by_id.get(4625) and by_id.get(4624):
-        fail_users: set[str] = {
-            ev.fields.get("TargetUserName", "") for ev in by_id[4625]
-        }
+        fail_users: set[str] = {ev.fields.get("TargetUserName", "") for ev in by_id[4625]}
         success_after_fail: list[_EvtxEvent] = [
-            ev for ev in by_id[4624]
-            if ev.fields.get("TargetUserName", "") in fail_users
+            ev for ev in by_id[4624] if ev.fields.get("TargetUserName", "") in fail_users
         ]
         if success_after_fail:
             users = {ev.fields.get("TargetUserName", "?") for ev in success_after_fail}
-            report.add(Finding(
-                rule="evtx.success_after_failures",
-                severity=Severity.HIGH,
-                category="credential_access",
-                message=(
-                    f"Successful logon after prior failures for {len(users)} account(s) — "
-                    "possible credential stuffing or password-guessing success."
-                ),
-                evidence=tuple(users)[:6],
-            ))
+            report.add(
+                Finding(
+                    rule="evtx.success_after_failures",
+                    severity=Severity.HIGH,
+                    category="credential_access",
+                    message=(
+                        f"Successful logon after prior failures for {len(users)} account(s) — "
+                        "possible credential stuffing or password-guessing success."
+                    ),
+                    evidence=tuple(users)[:6],
+                )
+            )
 
     # -----------------------------------------------------------------
     # 6. Lateral movement via RDP (LogonType=10)
     # -----------------------------------------------------------------
     rdp_logons: list[_EvtxEvent] = [
-        ev for ev in by_id.get(4624, [])
-        if ev.fields.get("LogonType") == "10"
+        ev for ev in by_id.get(4624, []) if ev.fields.get("LogonType") == "10"
     ]
     if rdp_logons:
         sources = {_ip_from_field(ev.fields.get("IpAddress", "")) for ev in rdp_logons} - {""}
-        report.add(Finding(
-            rule="evtx.rdp_logon",
-            severity=Severity.MEDIUM,
-            category="lateral_movement",
-            message=(
-                f"Remote Interactive (RDP) logon(s) detected: {len(rdp_logons)} events. "
-                "Source IPs: " + (", ".join(sorted(sources)[:6]) or "unknown")
-            ),
-            evidence=tuple(
-                f"{ev.fields.get('TargetUserName','?')} from "
-                f"{_ip_from_field(ev.fields.get('IpAddress','')) or 'local'}"
-                for ev in rdp_logons[:6]
-            ),
-        ))
+        report.add(
+            Finding(
+                rule="evtx.rdp_logon",
+                severity=Severity.MEDIUM,
+                category="lateral_movement",
+                message=(
+                    f"Remote Interactive (RDP) logon(s) detected: {len(rdp_logons)} events. "
+                    "Source IPs: " + (", ".join(sorted(sources)[:6]) or "unknown")
+                ),
+                evidence=tuple(
+                    f"{ev.fields.get('TargetUserName', '?')} from "
+                    f"{_ip_from_field(ev.fields.get('IpAddress', '')) or 'local'}"
+                    for ev in rdp_logons[:6]
+                ),
+            )
+        )
 
     # -----------------------------------------------------------------
     # 7. Lateral movement via network logon (LogonType=3, non-local source)
     # -----------------------------------------------------------------
     net_logons: list[_EvtxEvent] = [
-        ev for ev in by_id.get(4624, [])
-        if ev.fields.get("LogonType") == "3"
-        and _ip_from_field(ev.fields.get("IpAddress", ""))
+        ev
+        for ev in by_id.get(4624, [])
+        if ev.fields.get("LogonType") == "3" and _ip_from_field(ev.fields.get("IpAddress", ""))
     ]
     if net_logons:
         unique_src = {_ip_from_field(ev.fields.get("IpAddress", "")) for ev in net_logons} - {""}
-        report.add(Finding(
-            rule="evtx.network_logon",
-            severity=Severity.LOW,
-            category="lateral_movement",
-            message=(
-                f"{len(net_logons)} network logon(s) from {len(unique_src)} source(s). "
-                "Typical of SMB / NTLM lateral movement."
-            ),
-            evidence=tuple(sorted(unique_src))[:8],
-        ))
+        report.add(
+            Finding(
+                rule="evtx.network_logon",
+                severity=Severity.LOW,
+                category="lateral_movement",
+                message=(
+                    f"{len(net_logons)} network logon(s) from {len(unique_src)} source(s). "
+                    "Typical of SMB / NTLM lateral movement."
+                ),
+                evidence=tuple(sorted(unique_src))[:8],
+            )
+        )
 
     # -----------------------------------------------------------------
     # 8. Explicit credential logon (Event 4648 — RunAs / PSEXEC)
     # -----------------------------------------------------------------
     explicit_creds = by_id.get(4648, [])
     if explicit_creds:
-        report.add(Finding(
-            rule="evtx.explicit_credential_logon",
-            severity=Severity.MEDIUM,
-            category="lateral_movement",
-            message=(
-                f"{len(explicit_creds)} explicit-credential logon(s) (Event 4648). "
-                "Common in RunAs / PSExec / WMI lateral movement."
-            ),
-            evidence=tuple(
-                f"{ev.fields.get('SubjectUserName','?')} → {ev.fields.get('TargetUserName','?')} "
-                f"@ {ev.fields.get('TargetServerName','?')}"
-                for ev in explicit_creds[:6]
-            ),
-        ))
+        report.add(
+            Finding(
+                rule="evtx.explicit_credential_logon",
+                severity=Severity.MEDIUM,
+                category="lateral_movement",
+                message=(
+                    f"{len(explicit_creds)} explicit-credential logon(s) (Event 4648). "
+                    "Common in RunAs / PSExec / WMI lateral movement."
+                ),
+                evidence=tuple(
+                    f"{ev.fields.get('SubjectUserName', '?')} → {ev.fields.get('TargetUserName', '?')} "
+                    f"@ {ev.fields.get('TargetServerName', '?')}"
+                    for ev in explicit_creds[:6]
+                ),
+            )
+        )
 
     # -----------------------------------------------------------------
     # 9. Process creation — LOLBin (Event 4688)
     # -----------------------------------------------------------------
     lolbin_hits: list[_EvtxEvent] = [
-        ev for ev in by_id.get(4688, [])
+        ev
+        for ev in by_id.get(4688, [])
         if _basename(ev.fields.get("NewProcessName", "")) in _LOLBINS
     ]
     if lolbin_hits:
         bins = Counter(_basename(ev.fields.get("NewProcessName", "")) for ev in lolbin_hits)
-        report.add(Finding(
-            rule="evtx.lolbin_execution",
-            severity=Severity.MEDIUM,
-            category="execution",
-            message=(
-                f"{len(lolbin_hits)} LOLBin execution(s) (Event 4688). "
-                "Binaries: " + ", ".join(f"{b}x{c}" for b, c in bins.most_common(6))
-            ),
-            evidence=tuple(
-                ev.fields.get("CommandLine", ev.fields.get("NewProcessName", "?"))[:80]
-                for ev in lolbin_hits[:6]
-            ),
-        ))
+        report.add(
+            Finding(
+                rule="evtx.lolbin_execution",
+                severity=Severity.MEDIUM,
+                category="execution",
+                message=(
+                    f"{len(lolbin_hits)} LOLBin execution(s) (Event 4688). "
+                    "Binaries: " + ", ".join(f"{b}x{c}" for b, c in bins.most_common(6))
+                ),
+                evidence=tuple(
+                    ev.fields.get("CommandLine", ev.fields.get("NewProcessName", "?"))[:80]
+                    for ev in lolbin_hits[:6]
+                ),
+            )
+        )
 
     # -----------------------------------------------------------------
     # 10. Process creation — encoded / suspicious PowerShell command line
@@ -1355,13 +1457,15 @@ def _detect(events: list[_EvtxEvent], report: AnalyzerReport) -> None:
         if _ENCODED_CMDLINE_RE.search(cmdline):
             encoded_ps.append(cmdline[:200])
     if encoded_ps:
-        report.add(Finding(
-            rule="evtx.encoded_powershell",
-            severity=Severity.HIGH,
-            category="execution",
-            message=f"Encoded PowerShell command(s) in {len(encoded_ps)} 4688 event(s).",
-            evidence=tuple(encoded_ps[:6]),
-        ))
+        report.add(
+            Finding(
+                rule="evtx.encoded_powershell",
+                severity=Severity.HIGH,
+                category="execution",
+                message=f"Encoded PowerShell command(s) in {len(encoded_ps)} 4688 event(s).",
+                evidence=tuple(encoded_ps[:6]),
+            )
+        )
 
     # Suspicious PowerShell patterns (not just encoded)
     susp_ps: list[str] = []
@@ -1370,33 +1474,38 @@ def _detect(events: list[_EvtxEvent], report: AnalyzerReport) -> None:
         if _PS_SUSPICIOUS_RE.search(cmdline) and cmdline not in encoded_ps:
             susp_ps.append(cmdline[:200])
     if susp_ps:
-        report.add(Finding(
-            rule="evtx.suspicious_cmdline",
-            severity=Severity.MEDIUM,
-            category="execution",
-            message=f"{len(susp_ps)} suspicious command-line pattern(s) in process creation events.",
-            evidence=tuple(susp_ps[:6]),
-        ))
+        report.add(
+            Finding(
+                rule="evtx.suspicious_cmdline",
+                severity=Severity.MEDIUM,
+                category="execution",
+                message=f"{len(susp_ps)} suspicious command-line pattern(s) in process creation events.",
+                evidence=tuple(susp_ps[:6]),
+            )
+        )
 
     # -----------------------------------------------------------------
     # 11. PowerShell Script Block Logging (Event 4104)
     # -----------------------------------------------------------------
     ps_blocks: list[_EvtxEvent] = [
-        ev for ev in by_id.get(4104, [])
+        ev
+        for ev in by_id.get(4104, [])
         if _PS_SUSPICIOUS_RE.search(ev.fields.get("ScriptBlockText", ""))
     ]
     if ps_blocks:
         snippets = [ev.fields.get("ScriptBlockText", "")[:150] for ev in ps_blocks[:6]]
-        report.add(Finding(
-            rule="evtx.suspicious_ps_script_block",
-            severity=Severity.HIGH,
-            category="execution",
-            message=(
-                f"{len(ps_blocks)} suspicious PowerShell script block(s) (Event 4104). "
-                "Script block logging captured attacker code."
-            ),
-            evidence=tuple(snippets),
-        ))
+        report.add(
+            Finding(
+                rule="evtx.suspicious_ps_script_block",
+                severity=Severity.HIGH,
+                category="execution",
+                message=(
+                    f"{len(ps_blocks)} suspicious PowerShell script block(s) (Event 4104). "
+                    "Script block logging captured attacker code."
+                ),
+                evidence=tuple(snippets),
+            )
+        )
 
     # -----------------------------------------------------------------
     # 12. Scheduled task creation (Event 4698)
@@ -1404,16 +1513,18 @@ def _detect(events: list[_EvtxEvent], report: AnalyzerReport) -> None:
     sched_tasks = by_id.get(4698, [])
     if sched_tasks:
         names = [ev.fields.get("TaskName", "?") for ev in sched_tasks]
-        report.add(Finding(
-            rule="evtx.scheduled_task_created",
-            severity=Severity.HIGH,
-            category="persistence",
-            message=f"{len(sched_tasks)} scheduled task(s) created (Event 4698).",
-            evidence=tuple(
-                f"{n} by {ev.fields.get('SubjectUserName','?')} at {ev.timestamp}"
-                for n, ev in zip(names, sched_tasks, strict=False)
-            )[:6],
-        ))
+        report.add(
+            Finding(
+                rule="evtx.scheduled_task_created",
+                severity=Severity.HIGH,
+                category="persistence",
+                message=f"{len(sched_tasks)} scheduled task(s) created (Event 4698).",
+                evidence=tuple(
+                    f"{n} by {ev.fields.get('SubjectUserName', '?')} at {ev.timestamp}"
+                    for n, ev in zip(names, sched_tasks, strict=False)
+                )[:6],
+            )
+        )
 
     # -----------------------------------------------------------------
     # 13. New service installed (Event 7045 / 4697)
@@ -1421,35 +1532,37 @@ def _detect(events: list[_EvtxEvent], report: AnalyzerReport) -> None:
     services: list[_EvtxEvent] = by_id.get(7045, []) + by_id.get(4697, [])
     if services:
         svc_names = [ev.fields.get("ServiceName", "?") for ev in services]
-        report.add(Finding(
-            rule="evtx.new_service",
-            severity=Severity.HIGH,
-            category="persistence",
-            message=f"{len(services)} new service(s) installed (Event 7045/4697).",
-            evidence=tuple(
-                f"{n} [{ev.fields.get('ServiceFileName','?')[:60]}]"
-                for n, ev in zip(svc_names, services, strict=False)
-            )[:6],
-        ))
+        report.add(
+            Finding(
+                rule="evtx.new_service",
+                severity=Severity.HIGH,
+                category="persistence",
+                message=f"{len(services)} new service(s) installed (Event 7045/4697).",
+                evidence=tuple(
+                    f"{n} [{ev.fields.get('ServiceFileName', '?')[:60]}]"
+                    for n, ev in zip(svc_names, services, strict=False)
+                )[:6],
+            )
+        )
 
     # -----------------------------------------------------------------
     # 14. Account creation (Event 4720)
     # -----------------------------------------------------------------
     new_accounts = by_id.get(4720, [])
     if new_accounts:
-        names = [
-            ev.fields.get("TargetUserName", "?") for ev in new_accounts
-        ]
-        report.add(Finding(
-            rule="evtx.account_created",
-            severity=Severity.HIGH,
-            category="account_manipulation",
-            message=f"{len(new_accounts)} local user account(s) created (Event 4720).",
-            evidence=tuple(
-                f"{n} by {ev.fields.get('SubjectUserName','?')}"
-                for n, ev in zip(names, new_accounts, strict=False)
-            )[:6],
-        ))
+        names = [ev.fields.get("TargetUserName", "?") for ev in new_accounts]
+        report.add(
+            Finding(
+                rule="evtx.account_created",
+                severity=Severity.HIGH,
+                category="account_manipulation",
+                message=f"{len(new_accounts)} local user account(s) created (Event 4720).",
+                evidence=tuple(
+                    f"{n} by {ev.fields.get('SubjectUserName', '?')}"
+                    for n, ev in zip(names, new_accounts, strict=False)
+                )[:6],
+            )
+        )
 
     # -----------------------------------------------------------------
     # 15. Group membership modification (Events 4728/4732/4756)
@@ -1458,61 +1571,66 @@ def _detect(events: list[_EvtxEvent], report: AnalyzerReport) -> None:
         by_id.get(4728, []) + by_id.get(4732, []) + by_id.get(4756, [])
     )
     sensitive_group_changes = [
-        ev for ev in group_changes
+        ev
+        for ev in group_changes
         if ev.fields.get("TargetUserName", "").strip() in _SENSITIVE_GROUPS
         or any(g in ev.fields.get("TargetUserName", "") for g in ("Admin", "admin"))
     ]
     if sensitive_group_changes:
-        report.add(Finding(
-            rule="evtx.sensitive_group_change",
-            severity=Severity.HIGH,
-            category="account_manipulation",
-            message=(
-                f"{len(sensitive_group_changes)} member(s) added to privileged group(s) "
-                "(Events 4728/4732/4756)."
-            ),
-            evidence=tuple(
-                f"{ev.fields.get('MemberName','?')} → {ev.fields.get('TargetUserName','?')}"
-                for ev in sensitive_group_changes[:6]
-            ),
-        ))
+        report.add(
+            Finding(
+                rule="evtx.sensitive_group_change",
+                severity=Severity.HIGH,
+                category="account_manipulation",
+                message=(
+                    f"{len(sensitive_group_changes)} member(s) added to privileged group(s) "
+                    "(Events 4728/4732/4756)."
+                ),
+                evidence=tuple(
+                    f"{ev.fields.get('MemberName', '?')} → {ev.fields.get('TargetUserName', '?')}"
+                    for ev in sensitive_group_changes[:6]
+                ),
+            )
+        )
     elif group_changes:
-        report.add(Finding(
-            rule="evtx.group_membership_change",
-            severity=Severity.LOW,
-            category="account_manipulation",
-            message=f"{len(group_changes)} group membership change(s) (Events 4728/4732/4756).",
-            evidence=tuple(
-                f"{ev.fields.get('MemberName','?')} → {ev.fields.get('TargetUserName','?')}"
-                for ev in group_changes[:4]
-            ),
-        ))
+        report.add(
+            Finding(
+                rule="evtx.group_membership_change",
+                severity=Severity.LOW,
+                category="account_manipulation",
+                message=f"{len(group_changes)} group membership change(s) (Events 4728/4732/4756).",
+                evidence=tuple(
+                    f"{ev.fields.get('MemberName', '?')} → {ev.fields.get('TargetUserName', '?')}"
+                    for ev in group_changes[:4]
+                ),
+            )
+        )
 
     # -----------------------------------------------------------------
     # 16. Admin share access (Event 5140 — ADMIN$ / C$)
     # -----------------------------------------------------------------
     admin_shares: list[_EvtxEvent] = [
-        ev for ev in by_id.get(5140, [])
-        if any(
-            share in ev.fields.get("ShareName", "")
-            for share in ("ADMIN$", "C$", "D$", "IPC$")
-        )
+        ev
+        for ev in by_id.get(5140, [])
+        if any(share in ev.fields.get("ShareName", "") for share in ("ADMIN$", "C$", "D$", "IPC$"))
     ]
     if admin_shares:
-        report.add(Finding(
-            rule="evtx.admin_share_access",
-            severity=Severity.MEDIUM,
-            category="lateral_movement",
-            message=(
-                f"{len(admin_shares)} admin share access event(s) (Event 5140). "
-                "Typical in PsExec / WMI lateral movement."
-            ),
-            evidence=tuple(
-                f"{ev.fields.get('ShareName','?')} by {ev.fields.get('SubjectUserName','?')} "
-                f"from {ev.fields.get('IpAddress','?')}"
-                for ev in admin_shares[:6]
-            ),
-        ))
+        report.add(
+            Finding(
+                rule="evtx.admin_share_access",
+                severity=Severity.MEDIUM,
+                category="lateral_movement",
+                message=(
+                    f"{len(admin_shares)} admin share access event(s) (Event 5140). "
+                    "Typical in PsExec / WMI lateral movement."
+                ),
+                evidence=tuple(
+                    f"{ev.fields.get('ShareName', '?')} by {ev.fields.get('SubjectUserName', '?')} "
+                    f"from {ev.fields.get('IpAddress', '?')}"
+                    for ev in admin_shares[:6]
+                ),
+            )
+        )
 
     # -----------------------------------------------------------------
     # 17. Privileged logon (Event 4672 — special privileges assigned)
@@ -1523,36 +1641,41 @@ def _detect(events: list[_EvtxEvent], report: AnalyzerReport) -> None:
         # Only report if non-SYSTEM accounts have elevated sessions
         non_system = {u: c for u, c in users.items() if "SYSTEM" not in u and "$" not in u}
         if non_system:
-            report.add(Finding(
-                rule="evtx.privileged_logon",
-                severity=Severity.MEDIUM,
-                category="privilege_escalation",
-                message=(
-                    f"{sum(non_system.values())} privileged logon(s) by "
-                    f"{len(non_system)} non-SYSTEM account(s) (Event 4672)."
-                ),
-                evidence=tuple(f"{u}x{c}" for u, c in non_system.items())[:6],
-            ))
+            report.add(
+                Finding(
+                    rule="evtx.privileged_logon",
+                    severity=Severity.MEDIUM,
+                    category="privilege_escalation",
+                    message=(
+                        f"{sum(non_system.values())} privileged logon(s) by "
+                        f"{len(non_system)} non-SYSTEM account(s) (Event 4672)."
+                    ),
+                    evidence=tuple(f"{u}x{c}" for u, c in non_system.items())[:6],
+                )
+            )
 
     # -----------------------------------------------------------------
     # 18. Sysmon — LSASS / credential dumping (Event 10)
     # -----------------------------------------------------------------
     lsass_access: list[_EvtxEvent] = [
-        ev for ev in by_id.get(10, [])
+        ev
+        for ev in by_id.get(10, [])
         if _basename(ev.fields.get("TargetImage", "")) in _CRED_TARGETS
     ]
     if lsass_access:
         callers = {ev.fields.get("SourceImage", "?") for ev in lsass_access}
-        report.add(Finding(
-            rule="evtx.lsass_access",
-            severity=Severity.CRITICAL,
-            category="credential_access",
-            message=(
-                f"LSASS process access (Sysmon Event 10): {len(lsass_access)} access(es). "
-                "Credential dumping highly likely."
-            ),
-            evidence=tuple(callers)[:6],
-        ))
+        report.add(
+            Finding(
+                rule="evtx.lsass_access",
+                severity=Severity.CRITICAL,
+                category="credential_access",
+                message=(
+                    f"LSASS process access (Sysmon Event 10): {len(lsass_access)} access(es). "
+                    "Credential dumping highly likely."
+                ),
+                evidence=tuple(callers)[:6],
+            )
+        )
 
     # -----------------------------------------------------------------
     # 19. Sysmon — named pipe abuse (Events 17/18) — token impersonation
@@ -1560,51 +1683,51 @@ def _detect(events: list[_EvtxEvent], report: AnalyzerReport) -> None:
     # Patterns: EfsPotato / PrintSpoofer / JuicyPotato create a pipe that
     # tricks a privileged service (LSASS, SYSTEM) into connecting, then
     # impersonate its token for SYSTEM-level privilege escalation.
-    _LSASS_PIPES = frozenset({r"\lsass", r"\\lsass", "\\lsass"})
-    _SUSPICIOUS_PIPE_DIRS = ("\\temp\\", "\\tmp\\", "\\appdata\\local\\temp\\",
-                             "\\users\\public\\", "\\programdata\\")
-
     pipe_creates: list[_EvtxEvent] = [
-        ev for ev in by_id.get(17, [])
+        ev
+        for ev in by_id.get(17, [])
         if any(d in ev.fields.get("Image", "").lower() for d in _SUSPICIOUS_PIPE_DIRS)
         or ev.fields.get("Image", "").lower().startswith("c:\\temp\\")
     ]
     pipe_connects_lsass: list[_EvtxEvent] = [
-        ev for ev in by_id.get(18, [])
+        ev
+        for ev in by_id.get(18, [])
         if ev.fields.get("PipeName", "").lower() in _LSASS_PIPES
         or ev.fields.get("PipeName", "").lower().startswith("\\lsass")
     ]
     if pipe_connects_lsass:
-        images = {ev.fields.get("Image", "?") for ev in pipe_connects_lsass}
-        report.add(Finding(
-            rule="evtx.pipe_lsass_connect",
-            severity=Severity.CRITICAL,
-            category="privilege_escalation",
-            message=(
-                f"Named pipe connection to \\lsass detected (Sysmon Event 18): "
-                f"{len(pipe_connects_lsass)} event(s). Token impersonation attack "
-                f"(EfsPotato/PrintSpoofer/JuicyPotato pattern)."
-            ),
-            evidence=tuple(
-                f"PipeName={ev.fields.get('PipeName','?')} Image={ev.fields.get('Image','?')}"
-                for ev in pipe_connects_lsass[:6]
-            ),
-        ))
+        report.add(
+            Finding(
+                rule="evtx.pipe_lsass_connect",
+                severity=Severity.CRITICAL,
+                category="privilege_escalation",
+                message=(
+                    f"Named pipe connection to \\lsass detected (Sysmon Event 18): "
+                    f"{len(pipe_connects_lsass)} event(s). Token impersonation attack "
+                    f"(EfsPotato/PrintSpoofer/JuicyPotato pattern)."
+                ),
+                evidence=tuple(
+                    f"PipeName={ev.fields.get('PipeName', '?')} Image={ev.fields.get('Image', '?')}"
+                    for ev in pipe_connects_lsass[:6]
+                ),
+            )
+        )
     if pipe_creates:
-        images = {ev.fields.get("Image", "?") for ev in pipe_creates}
-        report.add(Finding(
-            rule="evtx.pipe_create_suspicious",
-            severity=Severity.HIGH,
-            category="privilege_escalation",
-            message=(
-                f"Suspicious named pipe created from non-standard path (Sysmon Event 17): "
-                f"{len(pipe_creates)} event(s). Possible token impersonation setup."
-            ),
-            evidence=tuple(
-                f"PipeName={ev.fields.get('PipeName','?')} Image={ev.fields.get('Image','?')}"
-                for ev in pipe_creates[:6]
-            ),
-        ))
+        report.add(
+            Finding(
+                rule="evtx.pipe_create_suspicious",
+                severity=Severity.HIGH,
+                category="privilege_escalation",
+                message=(
+                    f"Suspicious named pipe created from non-standard path (Sysmon Event 17): "
+                    f"{len(pipe_creates)} event(s). Possible token impersonation setup."
+                ),
+                evidence=tuple(
+                    f"PipeName={ev.fields.get('PipeName', '?')} Image={ev.fields.get('Image', '?')}"
+                    for ev in pipe_creates[:6]
+                ),
+            )
+        )
 
     # -----------------------------------------------------------------
     # 20. Windows Defender — malware detected (Event 1116)
@@ -1618,93 +1741,99 @@ def _detect(events: list[_EvtxEvent], report: AnalyzerReport) -> None:
             sev_name = ev.fields.get("Severity Name", ev.fields.get("SeverityName", ""))
             path = ev.fields.get("Path", ev.fields.get("path", ""))
             threats[name] = (sev_name, path)
-        severity = Severity.CRITICAL if any(
-            "Severe" in t[0] or "High" in t[0] for t in threats.values()
-        ) else Severity.HIGH
-        report.add(Finding(
-            rule="evtx.defender_threat_detected",
-            severity=severity,
-            category="defence_evasion",
-            message=(
-                f"Windows Defender detected {len(wd_detected)} threat(s) (Event 1116). "
-                f"Unique threat names: {len(threats)}."
-            ),
-            evidence=tuple(
-                f"{name} [{sev}] @ {path[:60]}"
-                for name, (sev, path) in list(threats.items())[:6]
-            ),
-        ))
+        severity = (
+            Severity.CRITICAL
+            if any("Severe" in t[0] or "High" in t[0] for t in threats.values())
+            else Severity.HIGH
+        )
+        report.add(
+            Finding(
+                rule="evtx.defender_threat_detected",
+                severity=severity,
+                category="defence_evasion",
+                message=(
+                    f"Windows Defender detected {len(wd_detected)} threat(s) (Event 1116). "
+                    f"Unique threat names: {len(threats)}."
+                ),
+                evidence=tuple(
+                    f"{name} [{sev}] @ {path[:60]}"
+                    for name, (sev, path) in list(threats.items())[:6]
+                ),
+            )
+        )
     if wd_remediated:
         threat_names = {
-            ev.fields.get("Threat Name", ev.fields.get("ThreatName", "?"))
-            for ev in wd_remediated
+            ev.fields.get("Threat Name", ev.fields.get("ThreatName", "?")) for ev in wd_remediated
         }
-        actions = {
-            ev.fields.get("Action Name", ev.fields.get("ActionName", "?"))
-            for ev in wd_remediated
-        }
-        report.add(Finding(
-            rule="evtx.defender_threat_actioned",
-            severity=Severity.HIGH,
-            category="defence_evasion",
-            message=(
-                f"Windows Defender took action against {len(wd_remediated)} threat(s) "
-                f"(Event 1117). Threats: {', '.join(sorted(threat_names))[:120]}"
-            ),
-            evidence=tuple(
-                f"{ev.fields.get('Threat Name', '?')} → "
-                f"{ev.fields.get('Action Name', '?')} on {ev.fields.get('Detection User','?')}"
-                for ev in wd_remediated[:6]
-            ),
-        ))
+        report.add(
+            Finding(
+                rule="evtx.defender_threat_actioned",
+                severity=Severity.HIGH,
+                category="defence_evasion",
+                message=(
+                    f"Windows Defender took action against {len(wd_remediated)} threat(s) "
+                    f"(Event 1117). Threats: {', '.join(sorted(threat_names))[:120]}"
+                ),
+                evidence=tuple(
+                    f"{ev.fields.get('Threat Name', '?')} → "
+                    f"{ev.fields.get('Action Name', '?')} on {ev.fields.get('Detection User', '?')}"
+                    for ev in wd_remediated[:6]
+                ),
+            )
+        )
 
     # -----------------------------------------------------------------
     # 21. Sysmon — suspicious network connections (Event 3)
     # -----------------------------------------------------------------
     sysmon_net: list[_EvtxEvent] = by_id.get(3, [])
     rare_port_conns = [
-        ev for ev in sysmon_net
+        ev
+        for ev in sysmon_net
         if ev.fields.get("DestinationPort", "").isdigit()
-        and int(ev.fields.get("DestinationPort", "0")) not in (
-            80, 443, 8080, 8443, 53, 22, 25, 110, 143, 389, 636, 445, 139, 3389
-        )
+        and int(ev.fields.get("DestinationPort", "0"))
+        not in (80, 443, 8080, 8443, 53, 22, 25, 110, 143, 389, 636, 445, 139, 3389)
         and 1024 <= int(ev.fields.get("DestinationPort", "0")) <= 65535
     ]
     if len(rare_port_conns) >= 3:
-        report.add(Finding(
-            rule="evtx.sysmon_rare_port",
-            severity=Severity.LOW,
-            category="command_and_control",
-            message=(
-                f"{len(rare_port_conns)} outbound connections to uncommon ports (Sysmon Event 3). "
-                "Potential C2 channel."
-            ),
-            evidence=tuple(
-                f"{ev.fields.get('Image','?')} → "
-                f"{ev.fields.get('DestinationIp','?')}:{ev.fields.get('DestinationPort','?')}"
-                for ev in rare_port_conns[:6]
-            ),
-        ))
+        report.add(
+            Finding(
+                rule="evtx.sysmon_rare_port",
+                severity=Severity.LOW,
+                category="command_and_control",
+                message=(
+                    f"{len(rare_port_conns)} outbound connections to uncommon ports (Sysmon Event 3). "
+                    "Potential C2 channel."
+                ),
+                evidence=tuple(
+                    f"{ev.fields.get('Image', '?')} → "
+                    f"{ev.fields.get('DestinationIp', '?')}:{ev.fields.get('DestinationPort', '?')}"
+                    for ev in rare_port_conns[:6]
+                ),
+            )
+        )
 
     # -----------------------------------------------------------------
     # 22. Firewall disabled (Event 4950 / 4946)
     # -----------------------------------------------------------------
     fw_disabled: list[_EvtxEvent] = [
-        ev for ev in by_id.get(4950, []) + by_id.get(2004, [])
-        if "Disabled" in ev.fields.get("SettingValue", "") or
-           "Off" in ev.fields.get("SettingValue", "")
+        ev
+        for ev in by_id.get(4950, []) + by_id.get(2004, [])
+        if "Disabled" in ev.fields.get("SettingValue", "")
+        or "Off" in ev.fields.get("SettingValue", "")
     ]
     if fw_disabled:
-        report.add(Finding(
-            rule="evtx.firewall_disabled",
-            severity=Severity.HIGH,
-            category="defence_evasion",
-            message=(
-                "Windows Firewall profile disabled (Event 4950). "
-                "Common attacker prep to allow inbound connections."
-            ),
-            evidence=(f"count={len(fw_disabled)}",),
-        ))
+        report.add(
+            Finding(
+                rule="evtx.firewall_disabled",
+                severity=Severity.HIGH,
+                category="defence_evasion",
+                message=(
+                    "Windows Firewall profile disabled (Event 4950). "
+                    "Common attacker prep to allow inbound connections."
+                ),
+                evidence=(f"count={len(fw_disabled)}",),
+            )
+        )
 
     # -----------------------------------------------------------------
     # 23. Account lockout (Event 4740) — possible brute-force indicator
@@ -1712,16 +1841,18 @@ def _detect(events: list[_EvtxEvent], report: AnalyzerReport) -> None:
     lockouts = by_id.get(4740, [])
     if len(lockouts) >= 3:
         locked_users = Counter(ev.fields.get("TargetUserName", "?") for ev in lockouts)
-        report.add(Finding(
-            rule="evtx.account_lockout",
-            severity=Severity.LOW,
-            category="credential_access",
-            message=(
-                f"{len(lockouts)} account lockout event(s) (Event 4740) across "
-                f"{len(locked_users)} account(s)."
-            ),
-            evidence=tuple(f"{u}x{c}" for u, c in locked_users.most_common(6)),
-        ))
+        report.add(
+            Finding(
+                rule="evtx.account_lockout",
+                severity=Severity.LOW,
+                category="credential_access",
+                message=(
+                    f"{len(lockouts)} account lockout event(s) (Event 4740) across "
+                    f"{len(locked_users)} account(s)."
+                ),
+                evidence=tuple(f"{u}x{c}" for u, c in locked_users.most_common(6)),
+            )
+        )
 
     # -----------------------------------------------------------------
     # 24. Password reset (Event 4723/4724)
@@ -1729,59 +1860,67 @@ def _detect(events: list[_EvtxEvent], report: AnalyzerReport) -> None:
     pw_resets = by_id.get(4723, []) + by_id.get(4724, [])
     if pw_resets:
         targets_reset = {ev.fields.get("TargetUserName", "?") for ev in pw_resets}
-        report.add(Finding(
-            rule="evtx.password_reset",
-            severity=Severity.MEDIUM,
-            category="account_manipulation",
-            message=f"Password reset on {len(targets_reset)} account(s) (Event 4723/4724).",
-            evidence=tuple(targets_reset)[:6],
-        ))
+        report.add(
+            Finding(
+                rule="evtx.password_reset",
+                severity=Severity.MEDIUM,
+                category="account_manipulation",
+                message=f"Password reset on {len(targets_reset)} account(s) (Event 4723/4724).",
+                evidence=tuple(targets_reset)[:6],
+            )
+        )
 
     # -----------------------------------------------------------------
     # 25. WMI / DCOM lateral movement (Event 4648 + wmic / wmiprvse target)
     # -----------------------------------------------------------------
     wmi_procs: list[_EvtxEvent] = [
-        ev for ev in by_id.get(4688, [])
+        ev
+        for ev in by_id.get(4688, [])
         if _basename(ev.fields.get("ParentProcessName", "")) in ("wmiprvse.exe", "wmic.exe")
         or _basename(ev.fields.get("NewProcessName", "")) == "wmic.exe"
     ]
     if wmi_procs:
-        report.add(Finding(
-            rule="evtx.wmi_execution",
-            severity=Severity.MEDIUM,
-            category="execution",
-            message=(
-                f"{len(wmi_procs)} process(es) spawned via WMI / DCOM (Event 4688). "
-                "Common lateral movement / persistence technique."
-            ),
-            evidence=tuple(
-                ev.fields.get("CommandLine", ev.fields.get("NewProcessName", "?"))[:80]
-                for ev in wmi_procs[:6]
-            ),
-        ))
+        report.add(
+            Finding(
+                rule="evtx.wmi_execution",
+                severity=Severity.MEDIUM,
+                category="execution",
+                message=(
+                    f"{len(wmi_procs)} process(es) spawned via WMI / DCOM (Event 4688). "
+                    "Common lateral movement / persistence technique."
+                ),
+                evidence=tuple(
+                    ev.fields.get("CommandLine", ev.fields.get("NewProcessName", "?"))[:80]
+                    for ev in wmi_procs[:6]
+                ),
+            )
+        )
 
     # -----------------------------------------------------------------
     # 26. Registry persistence (Event 4657 / Sysmon 12/13)
     # -----------------------------------------------------------------
     reg_run_keys = [
-        ev for ev in by_id.get(4657, []) + by_id.get(12, []) + by_id.get(13, [])
+        ev
+        for ev in by_id.get(4657, []) + by_id.get(12, []) + by_id.get(13, [])
         if "\\Run\\" in ev.fields.get("ObjectName", ev.fields.get("TargetObject", ""))
         or "\\RunOnce\\" in ev.fields.get("ObjectName", ev.fields.get("TargetObject", ""))
     ]
     if reg_run_keys:
-        report.add(Finding(
-            rule="evtx.registry_persistence",
-            severity=Severity.HIGH,
-            category="persistence",
-            message=(
-                f"{len(reg_run_keys)} registry Run/RunOnce key modification(s). "
-                "Classic persistence mechanism."
-            ),
-            evidence=tuple(
-                ev.fields.get("ObjectName", ev.fields.get("TargetObject", "?"))[:80]
-                for ev in reg_run_keys[:6]
-            ),
-        ))
+        report.add(
+            Finding(
+                rule="evtx.registry_persistence",
+                severity=Severity.HIGH,
+                category="persistence",
+                message=(
+                    f"{len(reg_run_keys)} registry Run/RunOnce key modification(s). "
+                    "Classic persistence mechanism."
+                ),
+                evidence=tuple(
+                    ev.fields.get("ObjectName", ev.fields.get("TargetObject", "?"))[:80]
+                    for ev in reg_run_keys[:6]
+                ),
+            )
+        )
 
     # -----------------------------------------------------------------
     # 27. NTLM v1 downgrade / legacy auth (Event 4776 with non-NTLMv2)
@@ -1789,16 +1928,18 @@ def _detect(events: list[_EvtxEvent], report: AnalyzerReport) -> None:
     ntlm_logons = by_id.get(4776, [])
     if len(ntlm_logons) >= 5:
         users_ntlm = {ev.fields.get("TargetUserName", "?") for ev in ntlm_logons}
-        report.add(Finding(
-            rule="evtx.ntlm_auth",
-            severity=Severity.LOW,
-            category="credential_access",
-            message=(
-                f"{len(ntlm_logons)} NTLM authentication attempt(s) (Event 4776). "
-                "Relay / capture opportunity if not restricted."
-            ),
-            evidence=tuple(users_ntlm)[:6],
-        ))
+        report.add(
+            Finding(
+                rule="evtx.ntlm_auth",
+                severity=Severity.LOW,
+                category="credential_access",
+                message=(
+                    f"{len(ntlm_logons)} NTLM authentication attempt(s) (Event 4776). "
+                    "Relay / capture opportunity if not restricted."
+                ),
+                evidence=tuple(users_ntlm)[:6],
+            )
+        )
 
     # -----------------------------------------------------------------
     # 28. Sysmon — CreateRemoteThread (Event 8) — code injection
@@ -1806,12 +1947,9 @@ def _detect(events: list[_EvtxEvent], report: AnalyzerReport) -> None:
     # CreateRemoteThread is rarely legitimate outside debuggers/AV.
     # Flag when a user-space or system process injects into an unrelated
     # process, especially across security boundary (SYSTEM → user or vice versa).
-    _INJECTION_WHITELIST_SRC = frozenset({
-        "c:\\windows\\system32\\werfault.exe",
-        "c:\\windows\\system32\\wermgr.exe",
-    })
     crt_events: list[_EvtxEvent] = [
-        ev for ev in by_id.get(8, [])
+        ev
+        for ev in by_id.get(8, [])
         if ev.fields.get("SourceImage", "").lower() not in _INJECTION_WHITELIST_SRC
     ]
     if crt_events:
@@ -1819,19 +1957,18 @@ def _detect(events: list[_EvtxEvent], report: AnalyzerReport) -> None:
             (ev.fields.get("SourceImage", "?"), ev.fields.get("TargetImage", "?"))
             for ev in crt_events
         }
-        report.add(Finding(
-            rule="evtx.create_remote_thread",
-            severity=Severity.CRITICAL,
-            category="execution",
-            message=(
-                f"CreateRemoteThread detected (Sysmon Event 8): {len(crt_events)} injection(s). "
-                "Strong indicator of code injection / process hollowing / UAC bypass."
-            ),
-            evidence=tuple(
-                f"{src!r:.40} → {tgt!r:.40}"
-                for src, tgt in list(pairs)[:6]
-            ),
-        ))
+        report.add(
+            Finding(
+                rule="evtx.create_remote_thread",
+                severity=Severity.CRITICAL,
+                category="execution",
+                message=(
+                    f"CreateRemoteThread detected (Sysmon Event 8): {len(crt_events)} injection(s). "
+                    "Strong indicator of code injection / process hollowing / UAC bypass."
+                ),
+                evidence=tuple(f"{src!r:.40} → {tgt!r:.40}" for src, tgt in list(pairs)[:6]),
+            )
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1897,27 +2034,29 @@ def _build_summary(
         etype = ev.fields.get("TicketEncryptionType", "")
         svc = ev.fields.get("ServiceName", "")
         if etype in _WEAK_KERBEROS_ETYPES and svc and not svc.endswith("$"):
-            krb_tickets.append({
-                "timestamp": ev.timestamp,
-                "service": svc,
-                "client": ev.fields.get("TargetUserName", "?"),
-                "etype": etype,
-            })
+            krb_tickets.append(
+                {
+                    "timestamp": ev.timestamp,
+                    "service": svc,
+                    "client": ev.fields.get("TargetUserName", "?"),
+                    "etype": etype,
+                }
+            )
 
     # Services installed
     services: list[dict] = []
     for ev in by_id.get(7045, []) + by_id.get(4697, []):
-        services.append({
-            "name": ev.fields.get("ServiceName", "?"),
-            "path": ev.fields.get("ServiceFileName", ev.fields.get("ServiceFilePath", "?")),
-            "timestamp": ev.timestamp,
-            "account": ev.fields.get("ServiceAccount", "?"),
-        })
+        services.append(
+            {
+                "name": ev.fields.get("ServiceName", "?"),
+                "path": ev.fields.get("ServiceFileName", ev.fields.get("ServiceFilePath", "?")),
+                "timestamp": ev.timestamp,
+                "account": ev.fields.get("ServiceAccount", "?"),
+            }
+        )
 
     # Scheduled tasks
-    sched_tasks: list[str] = [
-        ev.fields.get("TaskName", "?") for ev in by_id.get(4698, [])
-    ]
+    sched_tasks: list[str] = [ev.fields.get("TaskName", "?") for ev in by_id.get(4698, [])]
 
     # PowerShell script blocks
     ps_blocks: list[str] = [
@@ -1971,21 +2110,25 @@ def analyze_evtx(raw: bytes, *, report: AnalyzerReport) -> None:
     """
     # Validate file header
     if raw[:8] != EVTX_FILE_MAGIC:
-        report.add(Finding(
-            rule="evtx.bad_magic",
-            severity=Severity.INFO,
-            category="anomaly",
-            message="File does not carry EVTX signature — parsing as raw bytes.",
-        ))
+        report.add(
+            Finding(
+                rule="evtx.bad_magic",
+                severity=Severity.INFO,
+                category="anomaly",
+                message="File does not carry EVTX signature — parsing as raw bytes.",
+            )
+        )
         return
 
     if len(raw) < EVTX_FILE_HEADER_SIZE:
-        report.add(Finding(
-            rule="evtx.truncated_header",
-            severity=Severity.INFO,
-            category="anomaly",
-            message="EVTX file header truncated.",
-        ))
+        report.add(
+            Finding(
+                rule="evtx.truncated_header",
+                severity=Severity.INFO,
+                category="anomaly",
+                message="EVTX file header truncated.",
+            )
+        )
         return
 
     # Read number of chunks from file header (offset 42, uint16 LE)
@@ -1994,6 +2137,7 @@ def analyze_evtx(raw: bytes, *, report: AnalyzerReport) -> None:
 
     # Gather overall entropy for the report (sample first 512 KiB)
     from ioc_hunter.analyze.common import shannon_entropy
+
     sample = raw[: min(len(raw), 512 * 1024)]
     report.overall_entropy = shannon_entropy(sample)
 
