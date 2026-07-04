@@ -72,14 +72,13 @@ they don't crash, just gracefully skip.
 git clone https://github.com/platinum2high/ioc-hunter
 cd ioc-hunter
 uv sync # Using uv
-python -m venv .venv # Using pyhton
+python -m venv .venv # Using python
 source .venv/bin/activate # Windows: .venv\Scripts\activate
 ```
 
 ### 2. Install the package
 
 ```bash
-uv tool install . # Using uv
 pip install -e . # Using pip
 ```
 
