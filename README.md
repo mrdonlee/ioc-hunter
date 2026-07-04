@@ -663,36 +663,68 @@ Every push to `main` redeploys automatically. Health endpoint at
 
 ## Architecture
 
-```
-                   ┌───────────────┐
-   raw text ─────▶│  parser/defang │
-                   └──────┬────────┘
-                          ▼
-                   ┌───────────────┐    cache hit ──▶ result
-                   │  SQLite cache │───┐
-                   └──────┬────────┘   │ miss
-                          ▼            ▼
-            ┌──────────────────────────────────────┐
-            │   async orchestrator (httpx)         │
-            │   ┌────────┬────────┬────────┐       │
-            │   │URLhaus │ OTX    │ VT     │  ...  │
-            │   └────────┴────────┴────────┘       │
-            └──────────────────┬───────────────────┘
-                               ▼
-                       ┌────────────────┐
-                       │ weighted scorer│
-                       └──────┬─────────┘
-                              ▼
-                       ┌────────────────┐
-                       │  correlator    │
-                       └──────┬─────────┘
-                              ▼
-              ┌────────────────────────────────┐
-              │ exporters: JSON / MD /         │
-              │           STIX / MISP          │
-              │ rule gen:  Sigma / Suricata    │
-              │ TUI dashboard                  │
-              └────────────────────────────────┘
+```mermaid
+flowchart LR
+    %% Node Definitions
+    IOC[IOC String]
+    Parser[Defang Aware Parser]
+    Cache[SQLite Cache]
+
+    subgraph Enrichment [IOC Enrichement]
+        direction TB
+        Orchestrator[TI Feeds]
+        Compiler[Compiler]
+
+        Orchestrator --> URLHaus[URLhaus]
+        Orchestrator --> OTX[OTX]
+        Orchestrator --> VT[VT]
+        Orchestrator --> More[...]
+
+        URLHaus --> Compiler
+        OTX --> Compiler
+        VT --> Compiler
+        More --> Compiler
+    end
+
+    Scorer[Weighted Scorer]
+    Correlator[Correlator]
+
+    subgraph Output [Outputs]
+        direction TB
+        Result
+
+        subgraph Exporters [Data Exporters]
+            JSON[JSON]
+            MD[Markdown]
+            STIX[STIX]
+            MISP[MISP]
+        end
+
+        subgraph RuleGen [Rule Generation]
+            Sigma[Sigma]
+            Suricata[Suricata]
+        end
+
+        Dashboard[TUI Dashboard]
+    end
+
+    %% Flow Connections
+    IOC --> Parser
+    Parser --> |Check Cache| Cache
+
+    Cache -->|Hit| Output
+    Cache -->|Miss| Orchestrator
+
+    Compiler --> Scorer
+    Scorer --> Correlator
+    Correlator --> Result
+    Result -->|Store| Cache
+    Result --> Exporters
+    Result --> RuleGen
+    Result --> Dashboard
+
+    %% Styling
+    style IOC fill:none,stroke:none,font-weight:bold
 ```
 
 | Module | Role |
