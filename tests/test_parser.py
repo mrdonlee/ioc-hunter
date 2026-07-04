@@ -106,8 +106,16 @@ def test_filename_extensions_not_extracted_as_domains() -> None:
     )
     iocs = extract_iocs(text)
     domain_values = {ioc.value for ioc in iocs if ioc.type == IOCType.DOMAIN}
-    for fake in ("malware.exe", "report.docx", "readme.txt", "invoice.pdf",
-                 "config.ini", "image.png", "script.ps1", "archive.tar"):
+    for fake in (
+        "malware.exe",
+        "report.docx",
+        "readme.txt",
+        "invoice.pdf",
+        "config.ini",
+        "image.png",
+        "script.ps1",
+        "archive.tar",
+    ):
         assert fake not in domain_values, f"{fake!r} should not be extracted as a domain"
 
 

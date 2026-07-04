@@ -10,8 +10,7 @@ from ioc_hunter.core._tlds import IANA_TLDS
 from ioc_hunter.core.types import IOCType
 
 _BASE58_MAP: dict[int, int] = {
-    c: i
-    for i, c in enumerate(b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
+    c: i for i, c in enumerate(b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
 }
 
 
@@ -29,6 +28,7 @@ def _btc_legacy_checksum_valid(s: str) -> bool:
     except (KeyError, OverflowError):
         return False
     return hashlib.sha256(hashlib.sha256(raw[:-4]).digest()).digest()[:4] == raw[-4:]
+
 
 _SHA256_RE = re.compile(r"^[a-fA-F0-9]{64}$")
 _SHA1_RE = re.compile(r"^[a-fA-F0-9]{40}$")

@@ -91,9 +91,9 @@ def test_btc_legacy_checksum_valid_accepts_real_addresses(address: str) -> None:
 @pytest.mark.parametrize(
     "address",
     [
-        "1JS95cPZqKKmDKapZuxbaSuh7HKw7Y",    # regex-match, wrong checksum
-        "1aupYQ21YKaNUP2CPmKit1hqswspQ7",   # regex-match, wrong checksum
-        "1RuyioeufVSEJzwZMGWdKwU483xJ8M",   # regex-match, wrong checksum
+        "1JS95cPZqKKmDKapZuxbaSuh7HKw7Y",  # regex-match, wrong checksum
+        "1aupYQ21YKaNUP2CPmKit1hqswspQ7",  # regex-match, wrong checksum
+        "1RuyioeufVSEJzwZMGWdKwU483xJ8M",  # regex-match, wrong checksum
         "1BoatSLRHtKNngkdXEeobR76b53LETtpyX",  # last char mutated → bad checksum
     ],
 )
