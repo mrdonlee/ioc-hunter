@@ -27,7 +27,7 @@ class _FakeEngine:
         self._fixture: dict[str, Verdict] = {
             "1.2.3.4": Verdict.MALICIOUS,
             "10.0.0.5": Verdict.BENIGN,
-            "evil.example": Verdict.MALICIOUS,
+            "evil.net": Verdict.MALICIOUS,
         }
 
     async def lookup_one(self, ioc: IOC) -> IOCVerdict:
@@ -145,14 +145,14 @@ async def test_check_value_too_long(client: httpx.AsyncClient) -> None:
 async def test_scan_extracts_and_enriches(client: httpx.AsyncClient) -> None:
     resp = await client.post(
         "/api/scan",
-        json={"text": "found 1.2.3.4 talking to evil.example, and 10.0.0.5 too"},
+        json={"text": "found 1.2.3.4 talking to evil.net, and 10.0.0.5 too"},
     )
     assert resp.status_code == 200
     data = resp.json()
     assert data["iocs_extracted"] >= 3
     values = {v["ioc"]["raw_value"] for v in data["verdicts"]}
     assert "1.2.3.4" in values
-    assert "evil.example" in values
+    assert "evil.net" in values
 
 
 @pytest.mark.asyncio
@@ -222,8 +222,7 @@ async def test_security_headers_present(client: httpx.AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_x_forwarded_for_used_for_rate_limit(app_with_fake_engine: FastAPI) -> None:
-    """A client sending a spoofed XFF header should be bucketed by the
-    leftmost value, not by request.client.host."""
+    """Rate-limit bucket is derived from the rightmost XFF entry (proxy-added)."""
     app_with_fake_engine.state.limiter = RateLimiter(max_requests=2, window_seconds=60)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app_with_fake_engine), base_url="http://t"
@@ -249,6 +248,31 @@ async def test_x_forwarded_for_used_for_rate_limit(app_with_fake_engine: FastAPI
             headers={"X-Forwarded-For": "user-b"},
         )
         assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_xff_spoofing_cannot_bypass_rate_limit(app_with_fake_engine: FastAPI) -> None:
+    """A client rotating fake leftmost XFF entries must still be rate-limited
+    by the rightmost (proxy-appended) entry."""
+    app_with_fake_engine.state.limiter = RateLimiter(max_requests=2, window_seconds=60)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app_with_fake_engine), base_url="http://t"
+    ) as c:
+        # Attacker rotates the leftmost entry but real IP (rightmost) stays constant.
+        for fake_prefix in ("10.0.0.1", "10.0.0.2"):
+            resp = await c.post(
+                "/api/check",
+                json={"value": "1.2.3.4"},
+                headers={"X-Forwarded-For": f"{fake_prefix}, real-client-ip"},
+            )
+            assert resp.status_code == 200
+        # Third request from the same real IP must be blocked.
+        resp = await c.post(
+            "/api/check",
+            json={"value": "1.2.3.4"},
+            headers={"X-Forwarded-For": "10.0.0.3, real-client-ip"},
+        )
+        assert resp.status_code == 429
 
 
 def test_rate_limiter_basic() -> None:
@@ -452,7 +476,7 @@ async def test_byok_scan_path(app_with_fake_engine: FastAPI, mocked_ti_endpoints
         r = await c.post(
             "/api/scan",
             json={
-                "text": "found 1.2.3.4 talking to evil.example",
+                "text": "found 1.2.3.4 talking to evil.net",
                 "keys": {"otx_api_key": "otx-fake-token"},
             },
         )

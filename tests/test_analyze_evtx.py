@@ -59,6 +59,7 @@ from tests._evtx_fixtures import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_report(raw: bytes) -> AnalyzerReport:
     """Run the EVTX analyzer and return the populated report."""
     return analyze_bytes(raw, label="test.evtx")
@@ -76,6 +77,7 @@ def _severities(report: AnalyzerReport) -> dict[str, int]:
 # 1. Format detection
 # ---------------------------------------------------------------------------
 
+
 class TestFormatDetection:
     def test_evtx_magic_detected(self):
         raw = build_minimal_evtx()
@@ -89,6 +91,7 @@ class TestFormatDetection:
 # ---------------------------------------------------------------------------
 # 2. FILETIME utilities
 # ---------------------------------------------------------------------------
+
 
 class TestFiletimeUtils:
     def test_filetime_to_iso_known_value(self):
@@ -116,6 +119,7 @@ class TestFiletimeUtils:
 # 3. SID parsing
 # ---------------------------------------------------------------------------
 
+
 class TestSidParsing:
     def test_well_known_system_sid(self):
         # S-1-5-18 = SYSTEM
@@ -140,6 +144,7 @@ class TestSidParsing:
 # ---------------------------------------------------------------------------
 # 4. Value decoding
 # ---------------------------------------------------------------------------
+
 
 class TestValueDecoding:
     def test_wstring_decode(self):
@@ -179,6 +184,7 @@ class TestValueDecoding:
 # 5. Cursor reader
 # ---------------------------------------------------------------------------
 
+
 class TestCursor:
     def test_sequential_reads(self):
         # u8(1=0x01) + u16(2=0x0200 LE → \x02\x00) + u32(4=\x04\x00\x00\x00)
@@ -211,6 +217,7 @@ class TestCursor:
 # 6. BinXML name reader
 # ---------------------------------------------------------------------------
 
+
 class TestBinXmlName:
     def test_read_name_from_builder_output(self):
         b = _BinXmlBuilder()
@@ -235,6 +242,7 @@ class TestBinXmlName:
 # 7. BinXML event parsing
 # ---------------------------------------------------------------------------
 
+
 class TestBinXmlEventParsing:
     def test_parses_event_id(self):
         raw = build_minimal_evtx(event_id=4624)
@@ -258,20 +266,27 @@ class TestBinXmlEventParsing:
         assert report.metadata["evtx_summary"]["provider"] == "Microsoft-Windows-Security-Auditing"
 
     def test_parses_data_fields(self):
-        raw = build_evtx([
-            (_ts(0), {
-                "event_id": 4624,
-                "data_fields": {"TargetUserName": "alice", "LogonType": "3"},
-            }),
-        ])
+        raw = build_evtx(
+            [
+                (
+                    _ts(0),
+                    {
+                        "event_id": 4624,
+                        "data_fields": {"TargetUserName": "alice", "LogonType": "3"},
+                    },
+                ),
+            ]
+        )
         report = _make_report(raw)
         assert report.metadata["evtx_summary"]["total_records"] == 1
 
     def test_time_range(self):
-        raw = build_evtx([
-            (_ts(0), {"event_id": 4624, "data_fields": {}}),
-            (_ts(3600), {"event_id": 4624, "data_fields": {}}),
-        ])
+        raw = build_evtx(
+            [
+                (_ts(0), {"event_id": 4624, "data_fields": {}}),
+                (_ts(3600), {"event_id": 4624, "data_fields": {}}),
+            ]
+        )
         report = _make_report(raw)
         s = report.metadata["evtx_summary"]
         assert s["time_first"] != s["time_last"]
@@ -280,6 +295,7 @@ class TestBinXmlEventParsing:
 # ---------------------------------------------------------------------------
 # 8. Detection rules
 # ---------------------------------------------------------------------------
+
 
 class TestKerberoasting:
     def test_kerberoasting_rule_fires(self):
@@ -464,6 +480,7 @@ class TestSensitiveGroup:
 # 9. ATT&CK tagging
 # ---------------------------------------------------------------------------
 
+
 class TestAttackTagging:
     def test_kerberoasting_tagged_t1558_003(self):
         raw = build_kerberoasting_evtx()
@@ -498,6 +515,7 @@ class TestAttackTagging:
 # 10. IOC extraction
 # ---------------------------------------------------------------------------
 
+
 class TestIocExtraction:
     def test_ip_extracted_from_logon(self):
         raw = build_rdp_logon_evtx()
@@ -518,6 +536,7 @@ class TestIocExtraction:
 # 11. Robustness / adversarial input
 # ---------------------------------------------------------------------------
 
+
 class TestRobustness:
     def test_wrong_magic_no_crash(self):
         raw = b"NOTEVTX\x00" + b"\x00" * 4088
@@ -535,6 +554,7 @@ class TestRobustness:
 
     def test_random_bytes_no_crash(self):
         import os
+
         raw = os.urandom(65536 + 4096)
         # Patch in EVTX magic so it routes to the EVTX analyzer
         raw = b"ElfFile\x00" + raw[8:]
@@ -554,10 +574,7 @@ class TestRobustness:
         assert report is not None
 
     def test_multiple_records_parsed(self):
-        specs = [
-            (_ts(i * 10), {"event_id": 4624, "data_fields": {}})
-            for i in range(5)
-        ]
+        specs = [(_ts(i * 10), {"event_id": 4624, "data_fields": {}}) for i in range(5)]
         raw = build_evtx(specs)
         report = _make_report(raw)
         assert report.metadata["evtx_summary"]["total_records"] == 5
@@ -566,6 +583,7 @@ class TestRobustness:
 # ---------------------------------------------------------------------------
 # 12. Summary metadata correctness
 # ---------------------------------------------------------------------------
+
 
 class TestSummaryMetadata:
     def test_failed_logons_counted(self):
@@ -586,11 +604,10 @@ class TestSummaryMetadata:
         assert "System" in channels
 
     def test_event_id_distribution(self):
-        raw = build_evtx([
-            (_ts(i), {"event_id": 4625, "data_fields": {}}) for i in range(3)
-        ] + [
-            (_ts(100 + i), {"event_id": 4624, "data_fields": {}}) for i in range(2)
-        ])
+        raw = build_evtx(
+            [(_ts(i), {"event_id": 4625, "data_fields": {}}) for i in range(3)]
+            + [(_ts(100 + i), {"event_id": 4624, "data_fields": {}}) for i in range(2)]
+        )
         report = _make_report(raw)
         dist = report.metadata["evtx_summary"]["event_id_distribution"]
         assert dist.get("4625") == 3
@@ -614,6 +631,7 @@ class TestSummaryMetadata:
 # 13. Dispatcher integration
 # ---------------------------------------------------------------------------
 
+
 class TestDispatcherIntegration:
     def test_dispatcher_routes_evtx(self):
         raw = build_minimal_evtx()
@@ -635,6 +653,7 @@ class TestDispatcherIntegration:
         report = analyze_bytes(raw, label="test.evtx")
         # CRITICAL finding → MALICIOUS verdict
         from ioc_hunter.analyze.common import Verdict
+
         assert report.verdict == Verdict.MALICIOUS
 
 
@@ -642,19 +661,16 @@ class TestDispatcherIntegration:
 # 14. BinXML builder / fixture roundtrip
 # ---------------------------------------------------------------------------
 
+
 class TestBinXmlBuilderRoundtrip:
     def test_wstring_value_roundtrip(self):
         b = _BinXmlBuilder()
         binxml = (
-            b.frag_header()
-            .open_elem("Channel")
-            .val_wstr("Security")
-            .close_elem()
-            .eof()
-            .build()
+            b.frag_header().open_elem("Channel").val_wstr("Security").close_elem().eof().build()
         )
         # Parse it via the analyzer
         from ioc_hunter.analyze.evtx import _parse_event_binxml
+
         fields = _parse_event_binxml(binxml, b"", {})
         assert fields.get("Channel") == "Security"
 
@@ -664,7 +680,8 @@ class TestBinXmlBuilderRoundtrip:
             b.frag_header()
             .open_elem("EventData")
             .open_elem("Data")
-            .attr("Name").val_wstr("TargetUserName")
+            .attr("Name")
+            .val_wstr("TargetUserName")
             .val_wstr("alice")
             .close_elem()
             .close_elem()  # /EventData
@@ -672,6 +689,7 @@ class TestBinXmlBuilderRoundtrip:
             .build()
         )
         from ioc_hunter.analyze.evtx import _parse_event_binxml
+
         fields = _parse_event_binxml(binxml, b"", {})
         assert fields.get("TargetUserName") == "alice"
 
@@ -680,12 +698,14 @@ class TestBinXmlBuilderRoundtrip:
         binxml = (
             b.frag_header()
             .open_elem("TimeCreated")
-            .attr("SystemTime").val_filetime(1717200000.0)
+            .attr("SystemTime")
+            .val_filetime(1717200000.0)
             .close_empty()
             .eof()
             .build()
         )
         from ioc_hunter.analyze.evtx import _parse_event_binxml
+
         fields = _parse_event_binxml(binxml, b"", {})
         assert "TimeCreated" in fields
         assert "2024" in fields["TimeCreated"]
@@ -695,11 +715,16 @@ class TestBinXmlBuilderRoundtrip:
         b = _BinXmlBuilder()
         binxml = (
             b.frag_header()
-            .open_elem("Channel").val_wstr("Security").close_elem()
-            .open_elem("Channel").val_wstr("Security").close_elem()
+            .open_elem("Channel")
+            .val_wstr("Security")
+            .close_elem()
+            .open_elem("Channel")
+            .val_wstr("Security")
+            .close_elem()
             .eof()
             .build()
         )
         from ioc_hunter.analyze.evtx import _parse_event_binxml
+
         fields = _parse_event_binxml(binxml, b"", {})
         assert fields.get("Channel") == "Security"

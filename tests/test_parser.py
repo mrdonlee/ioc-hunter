@@ -96,3 +96,37 @@ def test_full_incident_text() -> None:
 def test_iocs_are_hashable_for_dedup() -> None:
     iocs = extract_iocs("evil.com evil.com")
     assert len(set(iocs)) == len(iocs)
+
+
+def test_filename_extensions_not_extracted_as_domains() -> None:
+    """Common attachment filenames must not produce false-positive domain IOCs."""
+    text = (
+        "Attachments: malware.exe report.docx readme.txt invoice.pdf "
+        "config.ini backup.zip image.png script.ps1 archive.tar"
+    )
+    iocs = extract_iocs(text)
+    domain_values = {ioc.value for ioc in iocs if ioc.type == IOCType.DOMAIN}
+    for fake in (
+        "malware.exe",
+        "report.docx",
+        "readme.txt",
+        "invoice.pdf",
+        "config.ini",
+        "image.png",
+        "script.ps1",
+        "archive.tar",
+    ):
+        assert fake not in domain_values, f"{fake!r} should not be extracted as a domain"
+
+
+def test_btc_invalid_checksum_not_extracted() -> None:
+    """Base58-looking tokens that fail checksum must be silently dropped."""
+    text = (
+        "Incident artifacts: 1JS95cPZqKKmDKapZuxbaSuh7HKw7Y "
+        "1aupYQ21YKaNUP2CPmKit1hqswspQ7 and real addr 1BoatSLRHtKNngkdXEeobR76b53LETtpyT"
+    )
+    iocs = extract_iocs(text)
+    values = {ioc.value for ioc in iocs}
+    assert "1BoatSLRHtKNngkdXEeobR76b53LETtpyT" in values
+    assert "1JS95cPZqKKmDKapZuxbaSuh7HKw7Y" not in values
+    assert "1aupYQ21YKaNUP2CPmKit1hqswspQ7" not in values

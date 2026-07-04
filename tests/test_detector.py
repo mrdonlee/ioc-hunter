@@ -2,7 +2,7 @@
 
 import pytest
 
-from ioc_hunter.core.detector import detect_type
+from ioc_hunter.core.detector import _btc_legacy_checksum_valid, detect_type
 from ioc_hunter.core.types import IOCType
 
 
@@ -51,7 +51,64 @@ def test_detect_positive(value: str, expected: IOCType) -> None:
         "evil.x",  # 1-char TLD
         "1234567890abcdef",  # 16 hex — not a hash
         "CVE-99-1",  # malformed CVE year
+        "malware.exe",  # file extension, not a TLD
+        "report.docx",
+        "readme.txt",
+        "invoice.pdf",
+        "config.ini",
+        "image.png",
     ],
 )
 def test_detect_negative(value: str) -> None:
     assert detect_type(value) is None
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_type"),
+    [
+        ("evil.com", IOCType.DOMAIN),
+        ("sub.evil.co.uk", IOCType.DOMAIN),
+        ("evil.net", IOCType.DOMAIN),
+        ("phish.io", IOCType.DOMAIN),
+    ],
+)
+def test_domain_tld_validation_accepts_real_tlds(value: str, expected_type: IOCType) -> None:
+    assert detect_type(value) == expected_type
+
+
+@pytest.mark.parametrize(
+    "address",
+    [
+        "1BoatSLRHtKNngkdXEeobR76b53LETtpyT",  # well-known P2PKH
+        "12c6DSiU4Rq3P4ZxziKxzrL5LmMBrzjrJX",  # P2PKH, block-170 coinbase hash
+        "3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy",  # P2SH
+    ],
+)
+def test_btc_legacy_checksum_valid_accepts_real_addresses(address: str) -> None:
+    assert _btc_legacy_checksum_valid(address) is True
+
+
+@pytest.mark.parametrize(
+    "address",
+    [
+        "1JS95cPZqKKmDKapZuxbaSuh7HKw7Y",  # regex-match, wrong checksum
+        "1aupYQ21YKaNUP2CPmKit1hqswspQ7",  # regex-match, wrong checksum
+        "1RuyioeufVSEJzwZMGWdKwU483xJ8M",  # regex-match, wrong checksum
+        "1BoatSLRHtKNngkdXEeobR76b53LETtpyX",  # last char mutated → bad checksum
+    ],
+)
+def test_btc_legacy_checksum_valid_rejects_invalid(address: str) -> None:
+    assert _btc_legacy_checksum_valid(address) is False
+
+
+@pytest.mark.parametrize(
+    "address",
+    [
+        "1JS95cPZqKKmDKapZuxbaSuh7HKw7Y",
+        "1aupYQ21YKaNUP2CPmKit1hqswspQ7",
+        "1RuyioeufVSEJzwZMGWdKwU483xJ8M",
+    ],
+)
+def test_detect_rejects_btc_with_bad_checksum(address: str) -> None:
+    """Strings matching the Base58 regex but failing checksum must not be BTC_ADDRESS."""
+    assert detect_type(address) is None
