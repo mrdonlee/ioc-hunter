@@ -66,20 +66,24 @@ they don't crash, just gracefully skip.
 
 ## Install
 
-### 1. Clone and create a virtualenv
+### 1. Clone and set up the environment
+
+**Option A — uv (recommended, fast):**
 
 ```bash
 git clone https://github.com/platinum2high/ioc-hunter
 cd ioc-hunter
-uv sync # Using uv
-python -m venv .venv # Using python
-source .venv/bin/activate # Windows: .venv\Scripts\activate
+uv sync
 ```
 
-### 2. Install the package
+**Option B — plain pip:**
 
 ```bash
-pip install -e . # Using pip
+git clone https://github.com/platinum2high/ioc-hunter
+cd ioc-hunter
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -e .
 ```
 
 This pulls in 4 runtime dependencies (`httpx`, `typer`, `rich`,
@@ -669,7 +673,7 @@ flowchart LR
     Parser[Defang Aware Parser]
     Cache[SQLite Cache]
 
-    subgraph Enrichment [IOC Enrichement]
+    subgraph Enrichment [IOC Enrichment]
         direction TB
         Orchestrator[TI Feeds]
         Compiler[Compiler]
