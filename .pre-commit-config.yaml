@@ -27,5 +27,5 @@ repos:
     rev: v0.15.20
     hooks:
       - id: ruff-check
-        args: [--fix, "--extend-select=I,E,UP", "--ignore=E501"]
+        args: [--fix, "--extend-select=E,W,F,I,N,UP,B,C4,SIM,RUF", "--ignore=E501"]
       - id: ruff-format
