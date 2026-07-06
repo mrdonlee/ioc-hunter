@@ -122,6 +122,17 @@ Sources marked `missing key` would show as yellow and skip with a clear
 message at runtime — not crash. You can run with as few as one (the
 keyless Tor feed).
 
+### 5. Set up pre-commit hooks (recommended for contributors)
+
+```bash
+pre-commit install
+pre-commit install --install-hooks
+```
+
+This enables:
+- **pre-commit**: Ruff lint + format, trailing whitespace, EOF fixer, YAML check, large file check, gitleaks secret scan
+- **commit-msg**: Conventional commit message validation
+
 ---
 
 ## Run it with Docker
