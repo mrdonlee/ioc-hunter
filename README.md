@@ -61,6 +61,7 @@ they don't crash, just gracefully skip.
 | Network forensics | tcpdump-only | PCAP / PCAPNG analyzer: 5-tuple flows + top-talkers, DNS dissection, HTTP plaintext, **TLS ClientHello/ServerHello + JA3/JA3S fingerprints**, **SMB lateral movement + NetNTLMv2 capture**, **Kerberoasting / AS-REP roasting**, beaconing detection, DGA-shape DNS, DNS-tunneling, port scans, one-sided exfil, plaintext-credential leaks, ICMP tunnel |
 | Archive triage | unzip + re-scan by hand | **Recursive** ZIP / TAR / GZIP / BZIP2 / XZ analyzer — every member re-dispatched through the engine, child IOCs merged, zip-bomb / depth / encryption defences, phishing-cargo detection |
 | Windows Event Log | none | **EVTX analyzer** — zero-dependency binary parser; 25+ detection rules: Kerberoasting, AS-REP roasting, brute-force vs password-spray differentiation, lateral movement (RDP / admin shares / PsExec), LOLBins, encoded PowerShell, log clearing, new services / scheduled tasks / accounts, LSASS access (Sysmon), firewall disabled, registry persistence — all mapped to MITRE ATT&CK |
+| Shortcut droppers | none | **LNK analyzer** — MS-SHLLINK binary parser; script-host / LOLBin targets, base64 `-EncodedCommand` payload decode, whitespace-padding + oversized-args evasion, icon / double-extension masquerade, hidden-window launch, env-var-only targets, UNC targets, appended-overlay payloads, builder machine-ID + MAC provenance |
 
 ---
 
@@ -153,7 +154,7 @@ mounted as a volume so it survives across containers.
 ioc-hunter check <ioc>                       single IOC verdict
 ioc-hunter scan-file <path>                  extract + enrich every IOC in a file
 ioc-hunter parse-eml <path>                  phishing .eml — headers, body, attachments
-ioc-hunter analyze <path>                    static analysis of PE / ELF / Mach-O / PDF / OOXML / OLE / RTF / PCAP / PCAPNG / EVTX / ZIP-TAR-GZIP archives
+ioc-hunter analyze <path>                    static analysis of PE / ELF / Mach-O / PDF / OOXML / OLE / RTF / PCAP / PCAPNG / EVTX / LNK / ZIP-TAR-GZIP archives
 ioc-hunter watch <path>                      tail a log file and alert on suspicious IOCs
 ioc-hunter correlate <path>                  shared-infra and shared-tag pivots
 ioc-hunter report <path> --format <fmt>      json | md | stix | misp | sigma | suricata
@@ -561,6 +562,39 @@ time window, channel, computer), a source-IP table from logon events,
 Kerberoastable ticket details, new services and scheduled tasks, and
 suspicious command lines in one pass.
 
+### Analyze a Windows Shortcut (.lnk)
+
+Since macros-from-the-internet got blocked, **LNK files are the default
+first-stage dropper** (Qakbot, Emotet, IcedID, Bumblebee). `ioc-hunter
+analyze` parses the MS-SHLLINK binary structure from scratch — header,
+LinkInfo, StringData, ExtraData blocks — and judges the classic
+malicious shapes:
+
+```bash
+ioc-hunter analyze invoice.pdf.lnk
+```
+
+| Rule | What it catches | ATT&CK |
+| --- | --- | --- |
+| `lnk.script_host_target` | target is powershell / mshta / rundll32 / 15 more LOLBins | T1204.002, T1218 |
+| `lnk.lolbin_in_command` | LOLBin invoked from the command text when the target field is hidden/empty | T1204.002, T1218, T1059 |
+| `lnk.encoded_powershell` | base64 `-EncodedCommand` payload — **decoded and fed into the IOC sweep** | T1027, T1059.001 |
+| `lnk.whitespace_padding` | payload padded past the Properties dialog with 40+ spaces | T1027 |
+| `lnk.oversized_arguments` | arguments beyond the ~260 chars the UI shows | T1027 |
+| `lnk.icon_masquerade` | script-host target dressed with a document/system icon | T1036.008 |
+| `lnk.double_extension` | `invoice.pdf.lnk` posing as a document | T1036.007 |
+| `lnk.hidden_window` | `SW_SHOWMINNOACTIVE` — console hidden on launch | T1564.003 |
+| `lnk.url_in_arguments` | remote payload fetch in the command line | T1204.001, T1105 |
+| `lnk.unc_target` | payload lives on a network share | T1021.002 |
+| `lnk.env_target_only` | target hidden in the environment-variable block | T1027 |
+| `lnk.overlay_data` | bytes appended after the shortcut structure | T1027.009 |
+| `lnk.zeroed_timestamps` | builder-kit scrubbed FILETIMEs | T1070.006 |
+
+**Forensic provenance for free** — the TrackerDataBlock leaks the
+*builder's* NetBIOS machine name and MAC address (version-1 UUID node);
+the LinkInfo block leaks the volume serial. All surfaced in the
+Shortcut panel as attribution pivots.
+
 ---
 
 ### Watch a log file live
@@ -752,7 +786,7 @@ flowchart LR
 | `exporters/` | JSON, Markdown, STIX 2.1, MISP Event |
 | `rules/` | Sigma + Suricata generators with severity floor |
 | `decoder/` | CyberChef-style operations + magic auto-detect |
-| `analyze/` | Static PE / ELF / Mach-O / PDF / OOXML / OLE / RTF / PCAP / PCAPNG / **EVTX** + recursive archive analyzer + MS-OVBA decompressor + JA3/JA3S fingerprinting + SMB/NTLM/Kerberos dissection + ATT&CK map |
+| `analyze/` | Static PE / ELF / Mach-O / PDF / OOXML / OLE / RTF / PCAP / PCAPNG / **EVTX** / **LNK** + recursive archive analyzer + MS-OVBA decompressor + JA3/JA3S fingerprinting + SMB/NTLM/Kerberos dissection + ATT&CK map |
 | `cli.py` | Rich-powered terminal UI |
 
 ---
@@ -801,8 +835,9 @@ All planned phases done.
 | 14.3a — PCAP / PCAPNG analyzer (flows, DNS/HTTP/TLS+JA3, beaconing, DGA, exfil, plaintext-creds) | ✅ |
 | 14.3b — JA3S + SMB/NTLM (NetNTLMv2 capture) + Kerberos (Kerberoast / AS-REP roast) + TLS anomalies + **recursive archive scan** | ✅ |
 | 14.4 — **EVTX Windows Event Log analyzer**: zero-dependency BinXML parser + 25+ ATT&CK-mapped detection rules (Kerberoasting, brute-force, lateral movement, LOLBins, persistence, defence evasion) | ✅ |
+| 14.5 — **LNK Windows Shortcut analyzer**: MS-SHLLINK parser, encoded-PowerShell decode, masquerade / evasion / overlay detection, builder provenance (machine ID + MAC) | ✅ |
 
-**653 tests, all green.** CI runs the full matrix (Python 3.11 + 3.12),
+**703 tests, all green.** CI runs the full matrix (Python 3.11 + 3.12),
 Docker build, `ruff` lint + format check, and `gitleaks` secret scan on
 every push.
 

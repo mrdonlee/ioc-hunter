@@ -429,7 +429,8 @@ _DOC_FORMATS = {FileFormat.PDF, FileFormat.OOXML, FileFormat.OLE, FileFormat.RTF
 _PCAP_FORMATS = {FileFormat.PCAP}
 _ARCHIVE_FORMATS = {FileFormat.ARCHIVE}
 _EVTX_FORMATS = {FileFormat.EVTX}
-_NON_BINARY_FORMATS = _DOC_FORMATS | _PCAP_FORMATS | _ARCHIVE_FORMATS | _EVTX_FORMATS
+_LNK_FORMATS = {FileFormat.LNK}
+_NON_BINARY_FORMATS = _DOC_FORMATS | _PCAP_FORMATS | _ARCHIVE_FORMATS | _EVTX_FORMATS | _LNK_FORMATS
 
 
 def _render_analyze_header(report: AnalyzerReport) -> None:
@@ -438,6 +439,7 @@ def _render_analyze_header(report: AnalyzerReport) -> None:
     is_pcap = report.format in _PCAP_FORMATS
     is_archive = report.format in _ARCHIVE_FORMATS
     is_evtx = report.format in _EVTX_FORMATS
+    is_lnk = report.format in _LNK_FORMATS
     is_non_binary = report.format in _NON_BINARY_FORMATS
 
     # ---- Format line. Binaries get Arch / Bits; docs get the parser-
@@ -468,6 +470,9 @@ def _render_analyze_header(report: AnalyzerReport) -> None:
         total = evtx_s.get("total_records", 0)
         chunks = report.metadata.get("evtx_num_chunks", 0)
         format_line += f"  [dim]Events:[/] {total:,}  [dim]Chunks:[/] {chunks}"
+    elif is_lnk:
+        target = report.metadata.get("lnk", {}).get("effective_target") or "—"
+        format_line += f"  [dim]Target:[/] {_escape_markup(str(target))}"
     else:
         format_line += (
             f"  [dim]Arch:[/] {report.architecture or '—'}  [dim]Bits:[/] {report.bitness or '—'}"
@@ -546,6 +551,8 @@ def _render_analyze_header(report: AnalyzerReport) -> None:
         title = "Archive Analyzer"
     elif is_evtx:
         title = "Windows Event Log Analyzer"
+    elif is_lnk:
+        title = "Windows Shortcut Analyzer"
     else:
         title = "Binary Analyzer"
     console.print(Panel.fit("\n".join(lines), title=title, border_style=style))
@@ -920,6 +927,35 @@ def _render_analyze_evtx(report: AnalyzerReport) -> None:
         console.print(table)
 
 
+def _render_analyze_lnk(report: AnalyzerReport) -> None:
+    """Render the shortcut-fields panel for a .lnk file."""
+    lnk = report.metadata.get("lnk")
+    if not lnk:
+        return
+    rows = (
+        ("Target", lnk.get("effective_target")),
+        ("Arguments", lnk.get("arguments")),
+        ("Working dir", lnk.get("working_dir")),
+        ("Icon", lnk.get("icon_location")),
+        ("Description", lnk.get("name")),
+        ("Network path", lnk.get("network_path")),
+        ("Volume serial", lnk.get("volume_serial")),
+        ("Machine ID", lnk.get("machine_id")),
+        ("MAC address", lnk.get("mac_address")),
+        ("ShowCommand", lnk.get("show_command")),
+    )
+    body_lines = []
+    for label, value in rows:
+        if value in (None, ""):
+            continue
+        text = str(value)
+        if len(text) > 300:
+            text = text[:300] + " …"
+        body_lines.append(f"[dim]{label}:[/] {_escape_markup(text)}")
+    if body_lines:
+        console.print(Panel.fit("\n".join(body_lines), title="Shortcut", border_style="cyan"))
+
+
 def _render_analyze_iocs(report: AnalyzerReport) -> None:
     if not report.iocs:
         return
@@ -1048,6 +1084,7 @@ async def _run_analyze(
     _render_analyze_pcap(report)
     _render_analyze_archive(report)
     _render_analyze_evtx(report)
+    _render_analyze_lnk(report)
     _render_analyze_findings(report)
     _render_analyze_iocs(report)
 

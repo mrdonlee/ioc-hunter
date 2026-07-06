@@ -36,6 +36,7 @@ from ioc_hunter.analyze.embedded import (
 )
 from ioc_hunter.analyze.evtx import EVTX_FILE_MAGIC, analyze_evtx
 from ioc_hunter.analyze.heuristics import apply_heuristics
+from ioc_hunter.analyze.lnk import LNK_HEADER_MAGIC, analyze_lnk
 from ioc_hunter.analyze.macho import (
     FAT_CIGAM,
     FAT_CIGAM_64,
@@ -69,6 +70,10 @@ def detect_format(head: bytes) -> FileFormat:
         return FileFormat.UNKNOWN
     if head[:8] == EVTX_FILE_MAGIC:
         return FileFormat.EVTX
+    # detect_format only sees 16 bytes; the full 20-byte CLSID check
+    # happens inside is_lnk / analyze_lnk.
+    if head[:16] == LNK_HEADER_MAGIC[:16]:
+        return FileFormat.LNK
     if head[:2] == b"MZ":
         return FileFormat.PE
     if head[:4] == b"\x7fELF":
@@ -288,6 +293,8 @@ def _run(
             )
     elif fmt == FileFormat.EVTX:
         analyze_evtx(raw, report=report)
+    elif fmt == FileFormat.LNK:
+        analyze_lnk(raw, report=report)
     elif is_tar(raw):
         # tar's magic lives at offset 257 so detect_format can't see it.
         report.format = FileFormat.ARCHIVE

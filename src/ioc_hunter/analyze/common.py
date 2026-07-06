@@ -87,6 +87,7 @@ class FileFormat(StrEnum):
     PCAP = "pcap"  # libpcap classic + PCAPNG (both surface as PCAP)
     ARCHIVE = "archive"  # ZIP / TAR / GZIP / BZIP2 / XZ — recursively scanned
     EVTX = "evtx"  # Windows XML Event Log (.evtx)
+    LNK = "lnk"  # Windows Shell Link (.lnk) — MS-SHLLINK
     UNKNOWN = "unknown"
 
 

@@ -185,6 +185,20 @@ _MAP: dict[str, tuple[str, ...]] = {
     "evtx.wmi_execution": ("T1047",),  # Windows Management Instrumentation
     "evtx.registry_persistence": ("T1547.001",),  # Registry Run Keys / Startup Folder
     "evtx.ntlm_auth": ("T1040", "T1557.001"),  # Network Sniffing / LLMNR
+    # ---- LNK / Windows Shortcut analyzer (phase 14.5) ----------------------
+    "lnk.script_host_target": ("T1204.002", "T1218"),  # Malicious File / LOLBin proxy
+    "lnk.lolbin_in_command": ("T1204.002", "T1218", "T1059"),  # LOLBin hidden in command
+    "lnk.encoded_powershell": ("T1027", "T1059.001"),  # Obfuscation + PowerShell
+    "lnk.icon_masquerade": ("T1036.008", "T1204.002"),  # Masquerade File Type
+    "lnk.double_extension": ("T1036.007",),  # Double File Extension
+    "lnk.hidden_window": ("T1564.003",),  # Hidden Window
+    "lnk.whitespace_padding": ("T1027",),  # Obfuscated Files or Information
+    "lnk.oversized_arguments": ("T1027",),
+    "lnk.url_in_arguments": ("T1204.001", "T1105"),  # Malicious Link / Ingress Tool Transfer
+    "lnk.unc_target": ("T1021.002", "T1204.002"),  # SMB / Admin Shares
+    "lnk.env_target_only": ("T1027",),
+    "lnk.overlay_data": ("T1027.009",),  # Embedded Payloads
+    "lnk.zeroed_timestamps": ("T1070.006",),  # Timestomp
 }
 
 
